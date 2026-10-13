@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ethereum ECC: Private Key to Public Key on Toy Curve</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for statistical exploration -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- KaTeX for crisp mathematical formulas -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              900: '#14532d'
+            },
+            eth: {
+              blue: '#627EEA',
+              purple: '#8A5FFF',
+              dark: '#1e293b'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    code, pre, .font-mono {
+      font-family: 'Fira Code', monospace;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .glow-point {
+      filter: drop-shadow(0 0 6px rgba(98, 126, 234, 0.8));
+    }
+    .glow-accent {
+      filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.7));
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-eth-blue selection:text-white">
+
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-eth-blue to-eth-purple flex items-center justify-center shadow-lg shadow-eth-blue/20">
+          <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            Ethereum ECC Explorer
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium">Toy Curve secp256k1</span>
+          </h1>
+          <p class="text-xs text-slate-400">Scalar Multiplication: Private Key $k \to$ Public Key $Q = kG$ on $y^2 \equiv x^3 + 7 \pmod{17}$</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 bg-slate-800/90 p-1 rounded-xl text-xs sm:text-sm font-medium border border-slate-700/60">
+        <button id="tabBtn-interactive" onclick="switchTab('interactive')" class="px-3.5 py-1.5 rounded-lg bg-eth-blue text-white shadow-sm transition">
+          Interactive Curve
+        </button>
+        <button id="tabBtn-stepbystep" onclick="switchTab('stepbystep')" class="px-3.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          Math & Steps
+        </button>
+        <button id="tabBtn-stats" onclick="switchTab('stats')" class="px-3.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          Statistical Suite
+        </button>
+        <button id="tabBtn-theory" onclick="switchTab('theory')" class="px-3.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          ECDLP vs Hash
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- TAB 1: INTERACTIVE VISUALIZER -->
+    <section id="tab-interactive" class="space-y-6">
+      
+      <!-- Top control dashboard -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+        <!-- Generator point selection -->
+        <div>
+          <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Base Point $G = (x, y)$</label>
+          <select id="basePointSelect" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-eth-blue">
+            <!-- Populated via JS -->
+          </select>
+          <div class="text-[11px] text-slate-500 mt-1">Order of $G(1,5)$ is $n = 18$</div>
+        </div>
+
+        <!-- Private key k slider & input -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Private Key $k$</label>
+            <span id="kDisplayVal" class="text-xs font-mono px-2 py-0.5 rounded bg-eth-blue/20 text-eth-blue font-bold">k = 6</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <input type="range" id="kSlider" min="1" max="18" value="6" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-eth-blue">
+            <input type="number" id="kInput" min="1" max="18" value="6" class="w-14 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-center text-sm font-mono focus:outline-none focus:ring-2 focus:ring-eth-blue">
+          </div>
+        </div>
+
+        <!-- Animation controls -->
+        <div>
+          <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Visualizer Playback</label>
+          <div class="flex items-center space-x-2">
+            <button id="playBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1 shadow-md transition">
+              <span id="playIcon">▶</span> <span id="playText">Play</span>
+            </button>
+            <button id="stepBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold py-2 px-3 rounded-lg transition" title="Step +1">
+              Step ❯
+            </button>
+            <button id="resetAnimBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold py-2 px-3 rounded-lg transition" title="Reset">
+              ↺
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+            <span>Speed:</span>
+            <input type="range" id="speedSlider" min="300" max="2200" step="100" value="1000" class="w-24 accent-emerald-500">
+          </div>
+        </div>
+
+        <!-- Ethereum Public Key Output Badge -->
+        <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col justify-center">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+            <span>Toy Public Key $Q = kG$</span>
+            <span id="pointInfinityBadge" class="hidden text-amber-400 text-[10px] font-bold">POINT AT $\infty$</span>
+          </div>
+          <div class="text-lg font-bold font-mono text-emerald-400 mt-0.5" id="publicKeyCoords">
+            (?, ?)
+          </div>
+          <div class="text-[10px] text-slate-400 truncate mt-1">
+            Eth Raw: <span id="ethRawPub" class="font-mono text-slate-300">0x04...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- View A: Discrete Modular Lattice (Mod 17) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                Discrete Finite Field $\mathbb{F}_{17}$ Lattice
+              </h2>
+              <p class="text-xs text-slate-400">All integer points satisfying $y^2 \equiv x^3 + 7 \pmod{17}$</p>
+            </div>
+            <span class="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300 font-mono">p = 17</span>
+          </div>
+
+          <!-- Canvas Container -->
+          <div class="relative w-full aspect-square bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center">
+            <canvas id="latticeCanvas" class="w-full h-full block"></canvas>
+            <!-- Overlay tooltip -->
+            <div id="latticeTooltip" class="absolute hidden bg-slate-900/95 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg shadow-xl pointer-events-none font-mono"></div>
+          </div>
+
+          <!-- Legend -->
+          <div class="mt-3 flex flex-wrap items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80 gap-2">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-slate-600 inline-block"></span>
+              <span>Valid curve point</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+              <span>Base $G$</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
+              <span>Previous $(k-1)G$</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-emerald-400 inline-block"></span>
+              <span>Current $kG$</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- View B: Continuous Geometric Chord & Tangent Analogy -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-eth-blue inline-block"></span>
+                Continuous Real Curve $y^2 = x^3 + 7$ Analogy
+              </h2>
+              <p class="text-xs text-slate-400">Geometric Secant/Tangent line & reflection intuition</p>
+            </div>
+            <span class="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300 font-mono">secp256k1 shape</span>
+          </div>
+
+          <div class="relative w-full aspect-square bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center">
+            <canvas id="realCurveCanvas" class="w-full h-full block"></canvas>
+            <div id="realCurveTooltip" class="absolute hidden bg-slate-900/95 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg shadow-xl pointer-events-none font-mono"></div>
+          </div>
+
+          <div class="mt-3 flex flex-wrap items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80 gap-2">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-0.5 bg-eth-blue inline-block"></span>
+              <span>$y = \pm\sqrt{x^3 + 7}$</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-0.5 bg-amber-400 border border-dashed inline-block"></span>
+              <span>Chord/Tangent Line</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
+              <span>Intersection point</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-emerald-400 inline-block"></span>
+              <span>Reflection ($P + Q$)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <h3 class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3">Scalar Multiplication Trajectory: $G \to kG$</h3>
+        <div id="trajectoryPills" class="flex flex-wrap gap-2 items-center">
+          <!-- Populated dynamically: 1G, 2G, 3G, ... -->
+        </div>
+        <div id="stepMathDetail" class="mt-4 p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 leading-relaxed overflow-x-auto">
+          <!-- Live mathematical step formula printed here -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: STEP-BY-STEP MATH & TABLE -->
+    <section id="tab-stepbystep" class="space-y-6 hidden">
+      
+      <!-- Math formulation card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-eth-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+          Point Addition & Doubling Formulas over $\mathbb{F}_p$
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs leading-relaxed text-slate-300">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div class="font-bold text-amber-400 mb-2">Case 1: Point Doubling ($P = Q$)</div>
+            <p class="mb-2">Tangent slope $\lambda$ requires derivative $\frac{dy}{dx} = \frac{3x_1^2}{2y_1} \pmod p$:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-emerald-300 mb-2">
+              $$\lambda = (3x_1^2) \cdot (2y_1)^{-1} \pmod p$$
+            </div>
+            <p>Resulting coordinates:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-emerald-300">
+              $$x_3 = \lambda^2 - 2x_1 \pmod p, \quad y_3 = \lambda(x_1 - x_3) - y_1 \pmod p$$
+            </div>
+          </div>
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div class="font-bold text-eth-blue mb-2">Case 2: Distinct Point Addition ($P \ne Q$)</div>
+            <p class="mb-2">Secant slope $\lambda$ connecting $P(x_1, y_1)$ and $Q(x_2, y_2)$:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-emerald-300 mb-2">
+              $$\lambda = (y_2 - y_1) \cdot (x_2 - x_1)^{-1} \pmod p$$
+            </div>
+            <p>Resulting coordinates:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-emerald-300">
+              $$x_3 = \lambda^2 - x_1 - x_2 \pmod p, \quad y_3 = \lambda(x_1 - x_3) - y_1 \pmod p$$
+            </div>
+          </div>
+        </div>
+        <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+          <span class="text-base font-bold">⚠️</span>
+          <span><strong>Point at Infinity ($\mathcal{O}$):</strong> If $x_1 = x_2$ and $y_1 \ne y_2$ (i.e. $y_1 + y_2 \equiv 0 \pmod p$), or if $y_1 = 0$ during doubling, the line is vertical and the sum is the neutral identity element $\mathcal{O}$. In this toy group, $18G = \mathcal{O}$.</span>
+        </div>
+      </div>
+
+      <!-- Complete Table of kG computations -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-sm text-white">Complete Group Orbit Table for $G(1, 5)$</h3>
+          <span class="text-xs text-slate-400">Total Group Elements: $n = 18$</span>
+        </div>
+        <div class="overflow-x-auto custom-scroll max-h-96">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-950 text-slate-400 sticky top-0 uppercase border-b border-slate-800">
+              <tr>
+                <th class="py-2.5 px-3">k</th>
+                <th class="py-2.5 px-3">Point kG</th>
+                <th class="py-2.5 px-3">Step Operation</th>
+                <th class="py-2.5 px-3">Slope $\lambda$</th>
+                <th class="py-2.5 px-3">x (Hex)</th>
+                <th class="py-2.5 px-3">y (Hex)</th>
+                <th class="py-2.5 px-3">Eth Format (Compressed)</th>
+              </tr>
+            </thead>
+            <tbody id="orbitTableBody" class="divide-y divide-slate-800/60">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 3: STATISTICAL EXPLORATION MODULE -->
+    <section id="tab-stats" class="space-y-6 hidden">
+      
+      <!-- Stats header & controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Statistical & Cryptographic Property Explorer
+          </h2>
+          <p class="text-xs text-slate-400">Analyzing point distributions, input-output pseudo-randomness, and avalanche properties</p>
+        </div>
+        <div class="flex items-center space-x-3">
+          <button onclick="runAvalancheTest()" class="px-3 py-1.5 bg-eth-blue hover:bg-blue-600 rounded-lg text-xs font-semibold text-white transition shadow">
+            Run Avalanche Test
+          </button>
+        </div>
+      </div>
+
+      <!-- Metrics summary cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Total Affine Points</div>
+          <div class="text-2xl font-bold font-mono text-emerald-400 mt-1" id="statTotalPoints">17</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">+ 1 Point at Infinity $\mathcal{O}$</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Unique X-Coords</div>
+          <div class="text-2xl font-bold font-mono text-blue-400 mt-1" id="statUniqueX">9 / 17</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">Quadratic residues constraint</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Bit Entropy (X Coord)</div>
+          <div class="text-2xl font-bold font-mono text-purple-400 mt-1" id="statBitEntropy">3.12 / 5</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">$\log_2(17) \approx 4.09$ max</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Pearson Corr ($k$ vs $x$)</div>
+          <div class="text-2xl font-bold font-mono text-amber-400 mt-1" id="statCorrelation">-0.041</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">Near zero (no linear leakage)</div>
+        </div>
+      </div>
+
+      <!-- Charts row 1: Distribution & Scatter -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Coordinate Value Frequency Histogram -->
+        <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl flex flex-col">
+          <h3 class="text-xs uppercase font-semibold tracking-wider text-slate-300 mb-1">
+            Coordinate Frequency Distribution ($x$ and $y$)
+          </h3>
+          <p class="text-xs text-slate-400 mb-4">Examining apparent uniformity of output residues mod 17</p>
+          <div class="relative h-64 w-full">
+            <canvas id="coordHistChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Input-Output Correlation: k vs (x, y) Scatter -->
+        <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl flex flex-col">
+          <h3 class="text-xs uppercase font-semibold tracking-wider text-slate-300 mb-1">
+            Input vs. Output Pseudo-Randomness ($k$ vs $x, y$)
+          </h3>
+          <p class="text-xs text-slate-400 mb-4">Lack of predictable monotonicity or gradient enables one-wayness</p>
+          <div class="relative h-64 w-full">
+            <canvas id="scatterChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-ping"></span>
+              Avalanche-Like Behavior & Hamming Distance Matrix
+            </h3>
+            <p class="text-xs text-slate-400">Flip 1 bit in private key $k \to k' = k \oplus 1$, measure output bit flip count</p>
+          </div>
+          <div class="text-xs font-mono bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
+            Avg Hamming Flip: <span id="avgHammingFlip" class="text-emerald-400 font-bold">48.2%</span>
+          </div>
+        </div>
+
+        <div id="avalancheLiveBox" class="p-4 bg-slate-950 rounded-xl border border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+              <tr>
+                <th class="py-2 px-3">k</th>
+                <th class="py-2 px-3">k (Bin)</th>
+                <th class="py-2 px-3">k' = k ⊕ 1</th>
+                <th class="py-2 px-3">Q = kG</th>
+                <th class="py-2 px-3">Q' = k'G</th>
+                <th class="py-2 px-3">Hamming Dist (Bits Changed)</th>
+                <th class="py-2 px-3">Flip %</th>
+              </tr>
+            </thead>
+            <tbody id="avalancheTableBody" class="divide-y divide-slate-800/60 text-slate-300">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 4: THEORETICAL DISCUSSION (ECDLP vs HASH FUNCTIONS) -->
+    <section id="tab-theory" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white mb-2">Cryptographic Analysis: One-Way Functions vs. Cryptographic Hash Functions</h2>
+          <p class="text-xs text-slate-400">An in-depth academic synthesis comparing the mathematical foundation of Ethereum's public key generation with cryptographic hashing.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed">
+          
+          <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <div class="flex items-center gap-2 text-eth-blue font-bold text-sm">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              Properties of ECC Scalar Multiplication ($k \mapsto kG$)
+            </div>
+            <ul class="space-y-2 list-disc list-inside">
+              <li><strong class="text-white">Elliptic Curve Discrete Logarithm Problem (ECDLP):</strong> Given $G$ and $Q = kG$, finding $k$ is computationally intractable for large cyclic groups (e.g., $2^{256}$ in secp256k1). Best known generic algorithm (Pollard's rho) requires $\mathcal{O}(\sqrt{n})$ group operations.</li>
+              <li><strong class="text-white">Algebraic / Homomorphic Group Structure:</strong> Unlike hash functions, ECC scalar multiplication preserves addition:
+                <div class="my-1.5 p-2 bg-slate-900 rounded font-mono text-emerald-400 text-[11px]">
+                  (k_1 + k_2)G = k_1 G + k_2 G
+                </div>
+                This algebraic linearity enables threshold signatures, ECDSA verification, and BIP-32 deterministic hierarchical wallets in Ethereum.
+              </li>
+              <li><strong class="text-white">Deterministic & Bijective on Subgroup:</strong> For prime order $n$, the mapping $k \mapsto kG$ is a bijection (isomorphism between $\mathbb{Z}_n$ and $\langle G \rangle$). There are zero collisions!</li>
+            </ul>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <div class="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+              Properties of Cryptographic Hash Functions (e.g., Keccak-256)
+            </div>
+            <ul class="space-y-2 list-disc list-inside">
+              <li><strong class="text-white">Strict Avalanche Criterion (SAC):</strong> Flipping any single input bit must cause each output bit to flip with probability exactly $50\%$. The relationship between input and output is designed to be purely pseudorandom and structurally destroyed.</li>
+              <li><strong class="text-white">Arbitrary Input $\to$ Fixed Output:</strong> Maps $\{0, 1\}^* \to \{0, 1\}^{256}$. Collisions mathematically exist by the Pigeonhole Principle, but finding one is hard ($\mathcal{O}(2^{128})$).</li>
+              <li><strong class="text-white">Deliberate Lack of Algebraic Structure:</strong> Linear or group homomorphisms are explicitly considered cryptographic flaws in hash functions (e.g., length-extension attacks).</li>
+            </ul>
+          </div>
+
+        </div>
+
+        <!-- Comparative Table Matrix -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border border-slate-800 rounded-xl overflow-hidden">
+            <thead class="bg-slate-950 text-slate-300 font-semibold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Feature / Property</th>
+                <th class="py-3 px-4 text-eth-blue">Public-Key ECC ($k \to kG$)</th>
+                <th class="py-3 px-4 text-emerald-400">Cryptographic Hash (Keccak-256)</th>
+                <th class="py-3 px-4 text-slate-400">Meaningful for Public Key?</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/80 bg-slate-950/60 font-mono text-[11px] text-slate-300">
+              <tr>
+                <td class="py-2.5 px-4 font-sans font-medium text-white">One-Wayness (Preimage Resistance)</td>
+                <td class="py-2.5 px-4">Yes (ECDLP intractable)</td>
+                <td class="py-2.5 px-4">Yes (Brute force $2^{256}$)</td>
+                <td class="py-2.5 px-4 text-emerald-400">Critical: Prevents private key recovery</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-sans font-medium text-white">Collisions Allowed?</td>
+                <td class="py-2.5 px-4">No ($1$-to-$1$ bijection on cyclic group)</td>
+                <td class="py-2.5 px-4">Yes (Infinite domain to 256 bits)</td>
+                <td class="py-2.5 px-4 text-emerald-400">Critical: Each privkey has unique pubkey</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-sans font-medium text-white">Homomorphism / Linearity</td>
+                <td class="py-2.5 px-4">Yes: $(a+b)G = aG + bG$</td>
+                <td class="py-2.5 px-4">No: $H(m_1 \mathbin{\|} m_2) \ne H(m_1)+H(m_2)$</td>
+                <td class="py-2.5 px-4 text-emerald-400">Vital: Enables ECDSA & BIP32 child keys</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-sans font-medium text-white">Strict Bit-level Avalanche Effect</td>
+                <td class="py-2.5 px-4">Moderate pseudo-randomness, but retains algebraic relations</td>
+                <td class="py-2.5 px-4">Strict (50% bit flip expectation)</td>
+                <td class="py-2.5 px-4 text-amber-400">Not required: group security suffices</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-sans font-medium text-white">Use in Ethereum Architecture</td>
+                <td class="py-2.5 px-4">Private key $\to$ Public Key ($64$ bytes)</td>
+                <td class="py-2.5 px-4">Public Key $\to$ Ethereum Address ($\text{Keccak}(Q)[12..31]$)</td>
+                <td class="py-2.5 px-4 text-sky-400">Complementary pipeline</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /* ==========================================================================
+       1. FINITE FIELD ARITHMETIC & TOY SECP256K1 CURVE MODEL
+       Curve: y^2 = x^3 + 7 (mod 17)
+       ========================================================================== */
+    const P = 17;
+    const CURVE_A = 0;
+    const CURVE_B = 7;
+    const BASE_G = { x: 1, y: 5 };
+
+    // Modular reduction ensuring positive remainder
+    function mod(n, m = P) {
+      return ((n % m) + m) % m;
+    }
+
+    // Extended Euclidean Algorithm for modular inverse
+    function modInverse(a, m = P) {
+      a = mod(a, m);
+      if (a === 0) return null; // No inverse
+      let [lm, hm] = [1, 0];
+      let [low, high] = [a, m];
+      while (low > 1) {
+        let ratio = Math.floor(high / low);
+        let nm = hm - ratio * lm;
+        let newLow = high - ratio * low;
+        hm = lm;
+        lm = nm;
+        high = low;
+        low = newLow;
+      }
+      return mod(lm, m);
+    }
+
+    // Check if point satisfies y^2 = x^3 + 7 (mod p)
+    function isOnCurve(pt) {
+      if (!pt || pt.infinity) return true;
+      const lhs = mod(pt.y * pt.y);
+      const rhs = mod(pt.x * pt.x * pt.x + CURVE_B);
+      return lhs === rhs;
+    }
+
+    // Elliptic curve point addition: P1 + P2
+    function pointAdd(p1, p2) {
+      if (!p1 || p1.infinity) return { ...p2, lambda: null, isDoubling: false };
+      if (!p2 || p2.infinity) return { ...p1, lambda: null, isDoubling: false };
+
+      // Check vertical line: P1 + (-P1) = O
+      if (p1.x === p2.x && mod(p1.y + p2.y) === 0) {
+        return { x: null, y: null, infinity: true, lambda: null, isDoubling: false };
+      }
+
+      let lambda;
+      let isDoubling = false;
+
+      if (p1.x === p2.x && p1.y === p2.y) {
+        // Point Doubling
+        isDoubling = true;
+        const num = mod(3 * p1.x * p1.x + CURVE_A);
+        const den = mod(2 * p1.y);
+        const invDen = modInverse(den, P);
+        if (invDen === null) return { x: null, y: null, infinity: true, lambda: null, isDoubling: true };
+        lambda = mod(num * invDen);
+      } else {
+        // Point Addition
+        const num = mod(p2.y - p1.y);
+        const den = mod(p2.x - p1.x);
+        const invDen = modInverse(den, P);
+        if (invDen === null) return { x: null, y: null, infinity: true, lambda: null, isDoubling: false };
+        lambda = mod(num * invDen);
+      }
+
+      const x3 = mod(lambda * lambda - p1.x - p2.x);
+      const y3 = mod(lambda * (p1.x - x3) - p1.y);
+      return { x: x3, y: y3, infinity: false, lambda, isDoubling };
+    }
+
+    // Enumerate all valid points on curve
+    function getAllCurvePoints() {
+      const points = [];
+      for (let x = 0; x < P; x++) {
+        const rhs = mod(x * x * x + CURVE_B);
+        for (let y = 0; y < P; y++) {
+          if (mod(y * y) === rhs) {
+            points.push({ x, y });
+          }
+        }
+      }
+      return points;
+    }
+
+    const ALL_POINTS = getAllCurvePoints();
+
+    // Compute complete trajectory [1G, 2G, ..., kG]
+    function computeTrajectory(basePt, kVal) {
+      const trajectory = [];
+      let current = { ...basePt, lambda: null, isDoubling: false };
+      trajectory.push({ k: 1, pt: current, op: 'Base Point G', lambda: null });
+
+      for (let i = 2; i <= kVal; i++) {
+        const prev = trajectory[i - 2].pt;
+        const next = pointAdd(prev, basePt);
+        const opDesc = prev.infinity
+          ? `O + G = G`
+          : (prev.x === basePt.x && prev.y === basePt.y)
+            ? `2G = Doubling G`
+            : `${i-1}G + G = Addition`;
+        trajectory.push({
+          k: i,
+          pt: next,
+          op: opDesc,
+          lambda: next.lambda,
+          isDoubling: next.isDoubling,
+          p1: prev,
+          p2: basePt
+        });
+      }
+      return trajectory;
+    }
+
+    function toHexByte(n) {
+      if (n === null || n === undefined) return '00';
+      return n.toString(16).padStart(2, '0');
+    }
+
+    function formatEthUncompressed(pt) {
+      if (!pt || pt.infinity) return '0x00 (Infinity)';
+      return `0x04${toHexByte(pt.x)}${toHexByte(pt.y)}`;
+    }
+
+    function formatEthCompressed(pt) {
+      if (!pt || pt.infinity) return '0x00 (Infinity)';
+      const prefix = (pt.y % 2 === 0) ? '02' : '03';
+      return `0x${prefix}${toHexByte(pt.x)}`;
+    }
+
+    /* ==========================================================================
+       2. UI STATE MANAGEMENT & CONTROLS
+       ========================================================================== */
+    let currentBase = { x: 1, y: 5 };
+    let currentK = 6;
+    let animK = 1;
+    let isPlaying = false;
+    let animInterval = null;
+    let animSpeed = 1000;
+
+    // DOM Elements
+    const basePointSelect = document.getElementById('basePointSelect');
+    const kSlider = document.getElementById('kSlider');
+    const kInput = document.getElementById('kInput');
+    const kDisplayVal = document.getElementById('kDisplayVal');
+    const publicKeyCoords = document.getElementById('publicKeyCoords');
+    const ethRawPub = document.getElementById('ethRawPub');
+    const pointInfinityBadge = document.getElementById('pointInfinityBadge');
+    const playBtn = document.getElementById('playBtn');
+    const playIcon = document.getElementById('playIcon');
+    const playText = document.getElementById('playText');
+    const stepBtn = document.getElementById('stepBtn');
+    const resetAnimBtn = document.getElementById('resetAnimBtn');
+    const speedSlider = document.getElementById('speedSlider');
+    const trajectoryPills = document.getElementById('trajectoryPills');
+    const stepMathDetail = document.getElementById('stepMathDetail');
+    const orbitTableBody = document.getElementById('orbitTableBody');
+
+    // Canvas references
+    const latticeCanvas = document.getElementById('latticeCanvas');
+    const latticeCtx = latticeCanvas.getContext('2d');
+    const realCanvas = document.getElementById('realCurveCanvas');
+    const realCtx = realCanvas.getContext('2d');
+
+    function populateBasePoints() {
+      basePointSelect.innerHTML = '';
+      ALL_POINTS.forEach(pt => {
+        const opt = document.createElement('option');
+        opt.value = `${pt.x},${pt.y}`;
+        opt.textContent = `(${pt.x}, ${pt.y})${pt.x === 1 && pt.y === 5 ? ' ★ Default Base G' : ''}`;
+        if (pt.x === 1 && pt.y === 5) opt.selected = true;
+        basePointSelect.appendChild(opt);
+      });
+    }
+
+    basePointSelect.addEventListener('change', (e) => {
+      const [x, y] = e.target.value.split(',').map(Number);
+      currentBase = { x, y };
+      resetAnimation();
+      updateAll();
+    });
+
+    function setK(newK) {
+      newK = Math.max(1, Math.min(18, parseInt(newK) || 1));
+      currentK = newK;
+      kSlider.value = newK;
+      kInput.value = newK;
+      kDisplayVal.textContent = `k = ${newK}`;
+      resetAnimation();
+      updateAll();
+    }
+
+    kSlider.addEventListener('input', (e) => setK(e.target.value));
+    kInput.addEventListener('change', (e) => setK(e.target.value));
+    speedSlider.addEventListener('input', (e) => {
+      animSpeed = 2500 - parseInt(e.target.value);
+      if (isPlaying) {
+        clearInterval(animInterval);
+        startPlayback();
+      }
+    });
+
+    function switchTab(tabId) {
+      ['interactive', 'stepbystep', 'stats', 'theory'].forEach(id => {
+        const el = document.getElementById(`tab-${id}`);
+        const btn = document.getElementById(`tabBtn-${id}`);
+        if (id === tabId) {
+          el.classList.remove('hidden');
+          btn.classList.add('bg-eth-blue', 'text-white');
+          btn.classList.remove('text-slate-300');
+        } else {
+          el.classList.add('hidden');
+          btn.classList.remove('bg-eth-blue', 'text-white');
+          btn.classList.add('text-slate-300');
+        }
+      });
+
+      if (tabId === 'stats') {
+        renderStatisticalCharts();
+        runAvalancheTest();
+      } else if (tabId === 'interactive') {
+        requestAnimationFrame(() => {
+          resizeCanvases();
+          drawLatticeView();
+          drawRealCurveView();
+        });
+      }
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ]
+        });
+      }
+    }
+
+    function resizeCanvases() {
+      const rectLattice = latticeCanvas.parentElement.getBoundingClientRect();
+      latticeCanvas.width = rectLattice.width * window.devicePixelRatio;
+      latticeCanvas.height = rectLattice.height * window.devicePixelRatio;
+      latticeCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const rectReal = realCanvas.parentElement.getBoundingClientRect();
+      realCanvas.width = rectReal.width * window.devicePixelRatio;
+      realCanvas.height = rectReal.height * window.devicePixelRatio;
+      realCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+
+    window.addEventListener('resize', () => {
+      resizeCanvases();
+      drawLatticeView();
+      drawRealCurveView();
+    });
+
+    function drawLatticeView() {
+      const w = latticeCanvas.parentElement.clientWidth;
+      const h = latticeCanvas.parentElement.clientHeight;
+      latticeCtx.clearRect(0, 0, w, h);
+
+      const margin = 42;
+      const plotW = w - 2 * margin;
+      const plotH = h - 2 * margin;
+      const stepX = plotW / (P - 1);
+      const stepY = plotH / (P - 1);
+
+      // Grid lines
+      latticeCtx.lineWidth = 1;
+      latticeCtx.strokeStyle = '#1e293b';
+      for (let i = 0; i < P; i++) {
+        const x = margin + i * stepX;
+        const y = h - margin - i * stepY;
+        
+        latticeCtx.beginPath();
+        latticeCtx.moveTo(x, margin);
+        latticeCtx.lineTo(x, h - margin);
+        latticeCtx.stroke();
+
+        latticeCtx.beginPath();
+        latticeCtx.moveTo(margin, y);
+        latticeCtx.lineTo(w - margin, y);
+        latticeCtx.stroke();
+
+        // Labels
+        latticeCtx.fillStyle = '#64748b';
+        latticeCtx.font = '10px Fira Code';
+        latticeCtx.textAlign = 'center';
+        latticeCtx.fillText(i, x, h - margin + 14);
+        latticeCtx.textAlign = 'right';
+        latticeCtx.fillText(i, margin - 8, y + 3);
+      }
+
+      // Trajectory steps up to animK
+      const traj = computeTrajectory(currentBase, currentK);
+      const activeTraj = traj.slice(0, animK);
+
+      // Draw connecting lines between successive scalar multiples
+      if (activeTraj.length > 1) {
+        latticeCtx.lineWidth = 1.5;
+        for (let i = 0; i < activeTraj.length - 1; i++) {
+          const ptA = activeTraj[i].pt;
+          const ptB = activeTraj[i + 1].pt;
+          if (!ptA.infinity && !ptB.infinity) {
+            const xA = margin + ptA.x * stepX;
+            const yA = h - margin - ptA.y * stepY;
+            const xB = margin + ptB.x * stepX;
+            const yB = h - margin - ptB.y * stepY;
+
+            latticeCtx.strokeStyle = 'rgba(98, 126, 234, 0.45)';
+            latticeCtx.setLineDash([4, 4]);
+            latticeCtx.beginPath();
+            latticeCtx.moveTo(xA, yA);
+            latticeCtx.lineTo(xB, yB);
+            latticeCtx.stroke();
+            latticeCtx.setLineDash([]);
+          }
+        }
+      }
+
+      // Draw all valid points on the curve
+      ALL_POINTS.forEach(pt => {
+        const cx = margin + pt.x * stepX;
+        const cy = h - margin - pt.y * stepY;
+        
+        latticeCtx.beginPath();
+        latticeCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+        latticeCtx.fillStyle = '#475569';
+        latticeCtx.fill();
+      });
+
+      // Highlight Base Point G
+      const gx = margin + currentBase.x * stepX;
+      const gy = h - margin - currentBase.y * stepY;
+      latticeCtx.beginPath();
+      latticeCtx.arc(gx, gy, 7, 0, Math.PI * 2);
+      latticeCtx.fillStyle = '#fbbf24';
+      latticeCtx.fill();
+      latticeCtx.strokeStyle = '#fff';
+      latticeCtx.lineWidth = 2;
+      latticeCtx.stroke();
+
+      // Highlight current animated point
+      const cur = activeTraj[activeTraj.length - 1];
+      if (cur && !cur.pt.infinity) {
+        const cx = margin + cur.pt.x * stepX;
+        const cy = h - margin - cur.pt.y * stepY;
+
+        // Animated aura
+        latticeCtx.beginPath();
+        latticeCtx.arc(cx, cy, 11, 0, Math.PI * 2);
+        latticeCtx.fillStyle = 'rgba(34, 197, 94, 0.3)';
+        latticeCtx.fill();
+
+        latticeCtx.beginPath();
+        latticeCtx.arc(cx, cy, 6, 0, Math.PI * 2);
+        latticeCtx.fillStyle = '#22c55e';
+        latticeCtx.fill();
+        latticeCtx.strokeStyle = '#ffffff';
+        latticeCtx.lineWidth = 2;
+        latticeCtx.stroke();
+
+        // Label tag
+        latticeCtx.fillStyle = '#22c55e';
+        latticeCtx.font = 'bold 11px Inter';
+        latticeCtx.textAlign = 'left';
+        latticeCtx.fillText(`${animK}G(${cur.pt.x}, ${cur.pt.y})`, cx + 12, cy - 8);
+      }
+    }
+
+    function drawRealCurveView() {
+      const w = realCanvas.parentElement.clientWidth;
+      const h = realCanvas.parentElement.clientHeight;
+      realCtx.clearRect(0, 0, w, h);
+
+      // Coordinate transformation: x from -3 to 5, y from -8 to 8
+      const xMin = -2.5, xMax = 4.5;
+      const yMin = -6.5, yMax = 6.5;
+
+      const toScreenX = (x) => ((x - xMin) / (xMax - xMin)) * w;
+      const toScreenY = (y) => h - ((y - yMin) / (yMax - yMin)) * h;
+
+      // Draw Axes
+      realCtx.strokeStyle = '#334155';
+      realCtx.lineWidth = 1;
+      
+      const ox = toScreenX(0);
+      const oy = toScreenY(0);
+
+      // X Axis
+      realCtx.beginPath();
+      realCtx.moveTo(0, oy);
+      realCtx.lineTo(w, oy);
+      realCtx.stroke();
+
+      // Y Axis
+      realCtx.beginPath();
+      realCtx.moveTo(ox, 0);
+      realCtx.lineTo(ox, h);
+      realCtx.stroke();
+
+      // Draw real curve: y = +- sqrt(x^3 + 7)
+      const curveStart = -Math.cbrt(7); // ~ -1.9129
+      realCtx.strokeStyle = '#627EEA';
+      realCtx.lineWidth = 2.5;
+
+      // Upper branch
+      realCtx.beginPath();
+      let first = true;
+      for (let px = 0; px <= w; px += 2) {
+        const x = xMin + (px / w) * (xMax - xMin);
+        if (x >= curveStart) {
+          const val = x * x * x + 7;
+          if (val >= 0) {
+            const y = Math.sqrt(val);
+            const py = toScreenY(y);
+            if (first) {
+              realCtx.moveTo(px, py);
+              first = false;
+            } else {
+              realCtx.lineTo(px, py);
+            }
+          }
+        }
+      }
+      realCtx.stroke();
+
+      // Lower branch
+      realCtx.beginPath();
+      first = true;
+      for (let px = 0; px <= w; px += 2) {
+        const x = xMin + (px / w) * (xMax - xMin);
+        if (x >= curveStart) {
+          const val = x * x * x + 7;
+          if (val >= 0) {
+            const y = -Math.sqrt(val);
+            const py = toScreenY(y);
+            if (first) {
+              realCtx.moveTo(px, py);
+              first = false;
+            } else {
+              realCtx.lineTo(px, py);
+            }
+          }
+        }
+      }
+      realCtx.stroke();
+
+      // Intuition demonstration: Point P & Tangent / Secant addition
+      // We pick visual real points: P(1, sqrt(8) ~ 2.83)
+      const xP = 1.0;
+      const yP = Math.sqrt(8);
+      const scrXP = toScreenX(xP);
+      const scrYP = toScreenY(yP);
+
+      // Tangent slope at P: dy/dx = 3x^2 / (2y) = 3 / (2 * 2.828) ~ 0.5303
+      const slope = (3 * xP * xP) / (2 * yP);
+      // Line equation: y - yP = slope * (x - xP) => y = slope * x + (yP - slope * xP)
+      const c = yP - slope * xP;
+      // Third intersection: x_R = slope^2 - 2*xP
+      const xR = slope * slope - 2 * xP;
+      const yR = slope * (xR - xP) + yP;
+      const scrXR = toScreenX(xR);
+      const scrYR = toScreenY(yR);
+
+      // Reflected sum point 2P = (xR, -yR)
+      const scrX2P = scrXR;
+      const scrY2P = toScreenY(-yR);
+
+      // Draw tangent chord line
+      realCtx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+      realCtx.lineWidth = 1.5;
+      realCtx.setLineDash([4, 4]);
+      realCtx.beginPath();
+      realCtx.moveTo(toScreenX(-2), toScreenY(slope * (-2) + c));
+      realCtx.lineTo(toScreenX(3.5), toScreenY(slope * (3.5) + c));
+      realCtx.stroke();
+
+      // Vertical reflection dashed line
+      realCtx.strokeStyle = 'rgba(168, 85, 247, 0.7)';
+      realCtx.beginPath();
+      realCtx.moveTo(scrXR, scrYR);
+      realCtx.lineTo(scrX2P, scrY2P);
+      realCtx.stroke();
+      realCtx.setLineDash([]);
+
+      // Point P
+      realCtx.beginPath();
+      realCtx.arc(scrXP, scrYP, 6, 0, Math.PI * 2);
+      realCtx.fillStyle = '#fbbf24';
+      realCtx.fill();
+
+      // Intersection R
+      realCtx.beginPath();
+      realCtx.arc(scrXR, scrYR, 5, 0, Math.PI * 2);
+      realCtx.fillStyle = '#a855f7';
+      realCtx.fill();
+
+      // Reflected Sum Point 2P
+      realCtx.beginPath();
+      realCtx.arc(scrX2P, scrY2P, 6, 0, Math.PI * 2);
+      realCtx.fillStyle = '#22c55e';
+      realCtx.fill();
+
+      // Labels
+      realCtx.font = '10px Inter';
+      realCtx.fillStyle = '#fbbf24';
+      realCtx.fillText('P(1, 2.83)', scrXP + 8, scrYP - 6);
+
+      realCtx.fillStyle = '#a855f7';
+      realCtx.fillText('Intersects R', scrXR + 8, scrYR + 12);
+
+      realCtx.fillStyle = '#22c55e';
+      realCtx.fillText('Sum 2P = Reflected(R)', scrX2P + 8, scrY2P + 14);
+    }
+
+    function updateLiveStepDetail() {
+      const traj = computeTrajectory(currentBase, currentK);
+      const curStep = traj[animK - 1];
+
+      // Update public key preview badge
+      const finalPt = traj[currentK - 1].pt;
+      if (finalPt.infinity) {
+        publicKeyCoords.textContent = 'Point at ∞';
+        pointInfinityBadge.classList.remove('hidden');
+        ethRawPub.textContent = '0x00';
+      } else {
+        publicKeyCoords.textContent = `(${finalPt.x}, ${finalPt.y})`;
+        pointInfinityBadge.classList.add('hidden');
+        ethRawPub.textContent = formatEthCompressed(finalPt);
+      }
+
+      // Trajectory Pills
+      trajectoryPills.innerHTML = '';
+      traj.forEach((step, idx) => {
+        const btn = document.createElement('button');
+        const isActive = (idx === animK - 1);
+        const isPast = (idx < animK);
+        btn.className = `px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition ${
+          isActive
+            ? 'bg-emerald-500 text-slate-950 font-bold ring-2 ring-emerald-300'
+            : isPast
+              ? 'bg-slate-800 text-emerald-400 border border-emerald-900/40'
+              : 'bg-slate-950 text-slate-500 border border-slate-800'
+        }`;
+        const ptStr = step.pt.infinity ? '∞' : `(${step.pt.x},${step.pt.y})`;
+        btn.textContent = `${step.k}G: ${ptStr}`;
+        btn.onclick = () => {
+          animK = idx + 1;
+          drawLatticeView();
+          updateLiveStepDetail();
+        };
+        trajectoryPills.appendChild(btn);
+      });
+
+      // Render math explanation
+      if (curStep.k === 1) {
+        stepMathDetail.innerHTML = `
+          <div class="text-emerald-400 font-bold mb-1">Step 1: Generator Initialization</div>
+          <div>We start at the base point <strong>G = (${currentBase.x}, ${currentBase.y})</strong>.</div>
+          <div class="text-slate-400 mt-1">Verification: y² ≡ ${mod(currentBase.y**2)} ≡ x³ + 7 ≡ ${mod(currentBase.x**3 + 7)} (mod 17). Valid point.</div>
+        `;
+      } else if (curStep.pt.infinity) {
+        stepMathDetail.innerHTML = `
+          <div class="text-amber-400 font-bold mb-1">Step ${curStep.k}: Result is Point at Infinity (𝒪)</div>
+          <div>P + Q yields a vertical tangent/chord. Slope denominator is 0 mod 17.</div>
+          <div class="text-slate-400 mt-1">Hence, ${curStep.k}G = 𝒪. (The order of G is ${curStep.k}).</div>
+        `;
+      } else if (curStep.isDoubling) {
+        const p1 = curStep.p1;
+        const num = mod(3 * p1.x * p1.x + CURVE_A);
+        const den = mod(2 * p1.y);
+        const invDen = modInverse(den, P);
+        stepMathDetail.innerHTML = `
+          <div class="text-emerald-400 font-bold mb-1">Step ${curStep.k}: Point Doubling (${curStep.k-1}G + G = 2G)</div>
+          <div>P = Q = (${p1.x}, ${p1.y})</div>
+          <div>Tangent Slope: λ = (3·x₁² + a) / (2·y₁) ≡ (3·${p1.x}² + 0) / (2·${p1.y}) ≡ ${num} · ${den}⁻¹ ≡ ${num} · ${invDen} ≡ <strong>${curStep.lambda} (mod 17)</strong></div>
+          <div class="mt-1">x₃ = λ² - 2x₁ ≡ ${curStep.lambda}² - 2(${p1.x}) ≡ <strong>${curStep.pt.x} (mod 17)</strong></div>
+          <div>y₃ = λ(x₁ - x₃) - y₁ ≡ ${curStep.lambda}(${p1.x} - ${curStep.pt.x}) - ${p1.y} ≡ <strong>${curStep.pt.y} (mod 17)</strong></div>
+        `;
+      } else {
+        const p1 = curStep.p1;
+        const p2 = curStep.p2;
+        const num = mod(p2.y - p1.y);
+        const den = mod(p2.x - p1.x);
+        const invDen = modInverse(den, P);
+        stepMathDetail.innerHTML = `
+          <div class="text-emerald-400 font-bold mb-1">Step ${curStep.k}: Point Addition (${curStep.k-1}G + G)</div>
+          <div>P = (${p1.x}, ${p1.y}), Q = (${p2.x}, ${p2.y})</div>
+          <div>Secant Slope: λ = (y₂ - y₁) / (x₂ - x₁) ≡ (${p2.y} - ${p1.y}) / (${p2.x} - ${p1.x}) ≡ ${num} · ${den}⁻¹ ≡ ${num} · ${invDen} ≡ <strong>${curStep.lambda} (mod 17)</strong></div>
+          <div class="mt-1">x₃ = λ² - x₁ - x₂ ≡ ${curStep.lambda}² - ${p1.x} - ${p2.x} ≡ <strong>${curStep.pt.x} (mod 17)</strong></div>
+          <div>y₃ = λ(x₁ - x₃) - y₁ ≡ ${curStep.lambda}(${p1.x} - ${curStep.pt.x}) - ${p1.y} ≡ <strong>${curStep.pt.y} (mod 17)</strong></div>
+        `;
+      }
+    }
+
+    function populateOrbitTable() {
+      orbitTableBody.innerHTML = '';
+      const fullTraj = computeTrajectory(currentBase, 18);
+      fullTraj.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition';
+        const isHighlight = (item.k === currentK);
+        if (isHighlight) tr.classList.add('bg-eth-blue/15', 'font-semibold');
+
+        const ptCoord = item.pt.infinity ? '<span class="text-amber-400">Point at ∞</span>' : `(${item.pt.x}, ${item.pt.y})`;
+        const slopeTxt = item.lambda !== null ? item.lambda : '—';
+        const hexX = item.pt.infinity ? '—' : `0x${toHexByte(item.pt.x)}`;
+        const hexY = item.pt.infinity ? '—' : `0x${toHexByte(item.pt.y)}`;
+        const ethComp = item.pt.infinity ? '0x00' : formatEthCompressed(item.pt);
+
+        tr.innerHTML = `
+          <td class="py-2 px-3 text-slate-300">${item.k}</td>
+          <td class="py-2 px-3 text-emerald-400">${ptCoord}</td>
+          <td class="py-2 px-3 text-slate-400 text-[11px]">${item.op}</td>
+          <td class="py-2 px-3 text-slate-300">${slopeTxt}</td>
+          <td class="py-2 px-3 text-slate-400">${hexX}</td>
+          <td class="py-2 px-3 text-slate-400">${hexY}</td>
+          <td class="py-2 px-3 text-eth-blue font-bold">${ethComp}</td>
+        `;
+        orbitTableBody.appendChild(tr);
+      });
+    }
+
+    function startPlayback() {
+      isPlaying = true;
+      playIcon.textContent = '⏸';
+      playText.textContent = 'Pause';
+      animInterval = setInterval(() => {
+        if (animK < currentK) {
+          animK++;
+        } else {
+          animK = 1;
+        }
+        drawLatticeView();
+        updateLiveStepDetail();
+      }, animSpeed);
+    }
+
+    function pausePlayback() {
+      isPlaying = false;
+      playIcon.textContent = '▶';
+      playText.textContent = 'Play';
+      clearInterval(animInterval);
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (isPlaying) pausePlayback();
+      else startPlayback();
+    });
+
+    stepBtn.addEventListener('click', () => {
+      pausePlayback();
+      if (animK < currentK) animK++;
+      else animK = 1;
+      drawLatticeView();
+      updateLiveStepDetail();
+    });
+
+    function resetAnimation() {
+      pausePlayback();
+      animK = currentK;
+      drawLatticeView();
+      updateLiveStepDetail();
+    }
+
+    resetAnimBtn.addEventListener('click', resetAnimation);
+
+    function updateAll() {
+      drawLatticeView();
+      drawRealCurveView();
+      updateLiveStepDetail();
+      populateOrbitTable();
+    }
+
+    /* ==========================================================================
+       3. STATISTICAL EXPLORATION & AVALANCHE ANALYSIS
+       ========================================================================== */
+    let histChartInstance = null;
+    let scatterChartInstance = null;
+
+    function renderStatisticalCharts() {
+      const fullTraj = computeTrajectory(currentBase, 17); // 1 to 17 (excluding infinity)
+      const xCounts = new Array(17).fill(0);
+      const yCounts = new Array(17).fill(0);
+      const scatterData = [];
+
+      let sumK = 0, sumX = 0;
+      fullTraj.forEach(item => {
+        if (!item.pt.infinity) {
+          xCounts[item.pt.x]++;
+          yCounts[item.pt.y]++;
+          scatterData.push({ x: item.k, y: item.pt.x, coordY: item.pt.y });
+          sumK += item.k;
+          sumX += item.pt.x;
+        }
+      });
+
+      // Metrics computation
+      const uniqueX = xCounts.filter(c => c > 0).length;
+      document.getElementById('statTotalPoints').textContent = fullTraj.length;
+      document.getElementById('statUniqueX').textContent = `${uniqueX} / 17`;
+
+      // Coordinate Bit Entropy H(X)
+      let entropy = 0;
+      const totalSamples = fullTraj.filter(i => !i.pt.infinity).length;
+      xCounts.forEach(c => {
+        if (c > 0) {
+          const p = c / totalSamples;
+          entropy -= p * Math.log2(p);
+        }
+      });
+      document.getElementById('statBitEntropy').textContent = `${entropy.toFixed(2)} / 5`;
+
+      // Pearson correlation between k and x
+      const meanK = sumK / totalSamples;
+      const meanX = sumX / totalSamples;
+      let num = 0, denK = 0, denX = 0;
+      scatterData.forEach(d => {
+        const dk = d.x - meanK;
+        const dx = d.y - meanX;
+        num += dk * dx;
+        denK += dk * dk;
+        denX += dx * dx;
+      });
+      const corr = num / Math.sqrt(denK * denX || 1);
+      document.getElementById('statCorrelation').textContent = corr.toFixed(3);
+
+      // Render Frequency Histogram
+      const ctxHist = document.getElementById('coordHistChart').getContext('2d');
+      if (histChartInstance) histChartInstance.destroy();
+      histChartInstance = new Chart(ctxHist, {
+        type: 'bar',
+        data: {
+          labels: Array.from({ length: 17 }, (_, i) => i.toString()),
+          datasets: [
+            {
+              label: 'Frequency of x-residue',
+              data: xCounts,
+              backgroundColor: 'rgba(98, 126, 234, 0.7)',
+              borderColor: '#627EEA',
+              borderWidth: 1,
+              borderRadius: 4
+            },
+            {
+              label: 'Frequency of y-residue',
+              data: yCounts,
+              backgroundColor: 'rgba(34, 197, 94, 0.6)',
+              borderColor: '#22c55e',
+              borderWidth: 1,
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } } }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Residue value modulo 17', color: '#64748b' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: '#1e293b' }
+            },
+            y: {
+              title: { display: true, text: 'Occurrences over group', color: '#64748b' },
+              ticks: { color: '#94a3b8', stepSize: 1 },
+              grid: { color: '#1e293b' }
+            }
+          }
+        }
+      });
+
+      // Render Scatter Chart: k vs x & y
+      const ctxScatter = document.getElementById('scatterChart').getContext('2d');
+      if (scatterChartInstance) scatterChartInstance.destroy();
+      scatterChartInstance = new Chart(ctxScatter, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'k vs. x-coord',
+              data: scatterData.map(d => ({ x: d.x, y: d.y })),
+              backgroundColor: '#627EEA',
+              borderColor: '#8A5FFF',
+              pointRadius: 5
+            },
+            {
+              label: 'k vs. y-coord',
+              data: scatterData.map(d => ({ x: d.x, y: d.coordY })),
+              backgroundColor: '#22c55e',
+              borderColor: '#15803d',
+              pointRadius: 5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } } }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Private Key k (Scalar input)', color: '#64748b' },
+              ticks: { color: '#94a3b8', stepSize: 1 },
+              grid: { color: '#1e293b' }
+            },
+            y: {
+              title: { display: true, text: 'Coordinate Value on Curve', color: '#64748b' },
+              ticks: { color: '#94a3b8', stepSize: 2 },
+              grid: { color: '#1e293b' }
+            }
+          }
+        }
+      });
+    }
+
+    function countSetBits(n) {
+      let count = 0;
+      while (n > 0) {
+        count += n & 1;
+        n >>= 1;
+      }
+      return count;
+    }
+
+    // Convert point coordinates into fixed 10-bit binary representation (5 bits for x, 5 bits for y)
+    function pointToBitstring(pt) {
+      if (!pt || pt.infinity) return 0; // 0 for infinity
+      return (pt.x << 5) | pt.y;
+    }
+
+    function runAvalancheTest() {
+      const fullTraj = computeTrajectory(currentBase, 18);
+      const getPt = (k) => {
+        const found = fullTraj.find(t => t.k === k);
+        return found ? found.pt : { infinity: true };
+      };
+
+      const tableBody = document.getElementById('avalancheTableBody');
+      tableBody.innerHTML = '';
+
+      let totalFlips = 0;
+      let totalComparisons = 0;
+      const TOTAL_BITS = 10; // 5 bits for x (<17), 5 bits for y (<17)
+
+      // Test all k from 1 to 16 with k' = k ^ 1 (single LSB flip)
+      for (let k = 1; k <= 16; k++) {
+        const kPrime = k ^ 1;
+        if (kPrime < 1 || kPrime > 18) continue;
+
+        const q1 = getPt(k);
+        const q2 = getPt(kPrime);
+
+        const bits1 = pointToBitstring(q1);
+        const bits2 = pointToBitstring(q2);
+
+        const diffBits = countSetBits(bits1 ^ bits2);
+        const flipPct = ((diffBits / TOTAL_BITS) * 100).toFixed(1);
+
+        totalFlips += diffBits;
+        totalComparisons++;
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition';
+        tr.innerHTML = `
+          <td class="py-2 px-3">${k}</td>
+          <td class="py-2 px-3 text-slate-400">${k.toString(2).padStart(5, '0')}</td>
+          <td class="py-2 px-3 text-amber-400">${kPrime} (${kPrime.toString(2).padStart(5, '0')})</td>
+          <td class="py-2 px-3 text-emerald-400">${q1.infinity ? '∞' : `(${q1.x}, ${q1.y})`}</td>
+          <td class="py-2 px-3 text-indigo-400">${q2.infinity ? '∞' : `(${q2.x}, ${q2.y})`}</td>
+          <td class="py-2 px-3 font-bold">${diffBits} / ${TOTAL_BITS} bits</td>
+          <td class="py-2 px-3 ${diffBits >= 4 && diffBits <= 6 ? 'text-emerald-400' : 'text-slate-300'}">${flipPct}%</td>
+        `;
+        tableBody.appendChild(tr);
+      }
+
+      const avgFlipRate = ((totalFlips / (totalComparisons * TOTAL_BITS)) * 100).toFixed(1);
+      document.getElementById('avgHammingFlip').textContent = `${avgFlipRate}%`;
+
+      // Live highlighted card for current slider key
+      const liveBox = document.getElementById('avalancheLiveBox');
+      const curQ = getPt(currentK);
+      const curKPrime = (currentK ^ 1) || 1;
+      const curQPrime = getPt(curKPrime);
+      const curBits1 = pointToBitstring(curQ);
+      const curBits2 = pointToBitstring(curQPrime);
+      const curHamming = countSetBits(curBits1 ^ curBits2);
+
+      liveBox.innerHTML = `
+        <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-500 uppercase">Input 1</div>
+          <div class="text-sm font-bold text-white mt-0.5">k = ${currentK} (${currentK.toString(2).padStart(5, '0')}₂)</div>
+          <div class="text-emerald-400 mt-1">Q = ${curQ.infinity ? '∞' : `(${curQ.x}, ${curQ.y})`}</div>
+        </div>
+        <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-500 uppercase">Input 2 (1-Bit Flipped)</div>
+          <div class="text-sm font-bold text-amber-400 mt-0.5">k' = ${curKPrime} (${curKPrime.toString(2).padStart(5, '0')}₂)</div>
+          <div class="text-indigo-400 mt-1">Q' = ${curQPrime.infinity ? '∞' : `(${curQPrime.x}, ${curQPrime.y})`}</div>
+        </div>
+        <div class="bg-slate-900 p-3 rounded-lg border border-slate-800 flex flex-col justify-center">
+          <div class="text-[10px] text-slate-500 uppercase">Hamming Bit Difference</div>
+          <div class="text-lg font-bold text-emerald-400 mt-0.5">${curHamming} / 10 Bits (${((curHamming/10)*100).toFixed(0)}%)</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">Target SAC expectation: ~50%</div>
+        </div>
+      `;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      populateBasePoints();
+      resizeCanvases();
+      updateAll();
+
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ]
+        });
+      }
+    });
+  </script>
+</body>
+</html>
