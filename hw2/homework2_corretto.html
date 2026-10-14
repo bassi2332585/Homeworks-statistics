@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HMWK 2 — Ethereum Wallet Cryptographic Pipeline & Primitives</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #121927;
+      --border: #1e293b;
+      --border-focus: #38bdf8;
+      --accent: #38bdf8;
+      --accent-alt: #818cf8;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --code-bg: #050811;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "JetBrains Mono", monospace; }
+    body { background-color: var(--bg); color: var(--text); padding: 24px; line-height: 1.6; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header { margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+    h1 { font-size: 1.85rem; color: var(--accent); margin-bottom: 6px; letter-spacing: -0.5px; }
+    h2 { font-size: 1.3rem; margin: 24px 0 12px; color: var(--accent-alt); display: flex; align-items: center; gap: 8px; }
+    h3 { font-size: 1.05rem; margin: 16px 0 8px; color: var(--text); }
+    p, li { color: var(--text-muted); font-size: 0.95rem; }
+    ul { margin-left: 20px; margin-bottom: 12px; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    
+    /* Controlli e Form */
+    .controls { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; align-items: center; }
+    button { background: var(--accent); color: #04101d; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
+    button:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    button.secondary { background: #334155; color: var(--text); }
+    button.secondary:hover { background: #475569; }
+    input[type="text"] { flex: 1; min-width: 320px; background: var(--code-bg); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 6px; font-family: monospace; font-size: 0.88rem; outline: none; transition: 0.2s; }
+    input[type="text"]:focus { border-color: var(--accent); }
+
+    /* Pipeline Diagram */
+    .pipeline-flow { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+    .step-box { background: var(--code-bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 16px; position: relative; }
+    .step-box.bip32 { border-left-color: var(--accent-alt); }
+    .step-box.highlight { border-left-color: var(--success); }
+    .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+    .step-title { font-weight: bold; color: var(--accent); font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .step-meta { font-size: 0.78rem; background: #1e293b; color: var(--accent-alt); padding: 3px 8px; border-radius: 4px; font-family: monospace; }
+    .step-val { font-family: monospace; word-break: break-all; color: var(--text); font-size: 0.86rem; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); }
+    .step-desc { font-size: 0.84rem; color: var(--text-muted); margin-top: 6px; }
+
+    /* Griglie Statistiche */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+    .stat-card { background: var(--code-bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); }
+    .stat-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500; }
+    .stat-number { font-size: 1.6rem; font-weight: bold; color: var(--success); font-family: monospace; margin: 4px 0; }
+    .bar-container { height: 12px; background: #1e293b; border-radius: 6px; overflow: hidden; margin-top: 10px; }
+    .bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.4s ease; }
+    
+    /* Tabelle Informative */
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 0.88rem; }
+    th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; vertical-align: top; }
+    th { background: #162032; color: var(--accent); font-weight: 600; }
+    code { font-family: monospace; background: var(--code-bg); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+
+    /* Timeline */
+    .timeline { position: relative; border-left: 2px solid var(--border); margin: 20px 0 10px 10px; padding-left: 20px; }
+    .timeline-item { margin-bottom: 20px; position: relative; }
+    .timeline-item::before { content: ''; position: absolute; left: -27px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+    .timeline-year { font-size: 0.85rem; font-weight: bold; color: var(--accent); font-family: monospace; }
+    .timeline-title { font-size: 1rem; font-weight: 600; color: var(--text); margin: 2px 0 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>HMWK 2 — Ethereum Wallet Cryptographic Pipeline</h1>
+      <p>From Mnemonic Seed to EIP-55 Address: BIP-39, BIP-32 HD Derivation, BIP-44, secp256k1, Keccak-256, and Statistical Properties.</p>
+    </header>
+
+    <!-- LIVE PIPELINE SIMULATOR -->
+    <div class="card">
+      <h2>1. Live Cryptographic Derivation Pipeline</h2>
+      <p>Esegui la pipeline passo-passo che converte il seed a 512 bit (da BIP-39) nella Master Extended Key BIP-32 e successivamente nell'indirizzo pubblico Ethereum.</p>
+      
+      <div class="controls" style="margin-top: 16px;">
+        <button onclick="generateRandomSeed()">🎲 Genera Nuovo Seed Casuale</button>
+        <button class="secondary" onclick="runPipelineFromInput()">⚡ Ricalcola Pipeline</button>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="font-size: 0.82rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Mnemonic BIP-39 di test (non inserire mai la seed phrase di un wallet reale):</label>
+        <input type="text" id="seedInput" style="width:100%; min-width:0;" value="test test test test test test test test test test test junk">
+      </div>
+
+      <div class="pipeline-flow" id="pipelineContainer"></div>
+    </div>
+
+    <!-- STATISTICAL SUITE & SAC -->
+    <div class="card">
+      <h2>2. Statistical Exploration: Avalanche Effect & Diffusion</h2>
+      <p>
+        Esperimento illustrativo dell’<strong>avalanche effect</strong>: viene invertito un bit della chiave privata ($k \oplus 1$) e si confrontano le distanze di Hamming della chiave pubblica secp256k1 (coordinate X e Y, 512 bit) e dell’indirizzo (160 bit). Un solo confronto non verifica lo <strong>Strict Avalanche Criterion (SAC)</strong>, che richiede molti input e flip di bit ripetuti.
+      </p>
+
+      <div class="controls" style="margin-top: 14px;">
+        <button onclick="runAvalancheTest()">🧪 Esegui Test Avalanche (Flip 1 Bit: k ⊕ 1)</button>
+      </div>
+
+      <div class="stats-grid" id="statsGrid" style="display: none;">
+        <div class="stat-card">
+          <div class="stat-label">Keccak-256 Bit Flips (Address)</div>
+          <div class="stat-number" id="statSacAddr">0%</div>
+          <p style="font-size: 0.75rem;">Valore medio atteso per hash ideale su molti campioni: ~50%</p>
+          <div class="bar-container"><div id="barSacAddr" class="bar-fill"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Distanza Hamming Indirizzo</div>
+          <div class="stat-number" id="statHamAddr">0 / 160</div>
+          <p style="font-size: 0.75rem;">Bit modificati su 160 totali</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">secp256k1 Bit Flips (Q = kG)</div>
+          <div class="stat-number" id="statSacEc">0%</div>
+          <p style="font-size: 0.75rem;">Coordinate (X, Y) su 512 bit</p>
+          <div class="bar-container"><div id="barSacEc" class="bar-fill" style="background: var(--accent-alt);"></div></div>
+        </div>
+      </div>
+
+      <div id="avalancheLog" style="margin-top: 16px;"></div>
+    </div>
+
+    <!-- TAXONOMY TABLE -->
+    <div class="card">
+      <h2>3. Cryptographic Taxonomy & Primitive Roles</h2>
+      <p>Distinzione formale delle primitive crittografiche impiegate nella pipeline:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Primitiva</th>
+            <th>Scopo & Proprietà</th>
+            <th>Reversibilità</th>
+            <th>Ruolo nel Wallet Ethereum</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Key Generation</strong></td>
+            <td>Generazione di entropia crittografica tramite CSPRNG: BIP-39 ammette 128–256 bit, in multipli di 32 (ad es. 128 bit per 12 parole o 256 bit per 24 parole).</td>
+            <td>Non è una trasformazione: produce un valore casuale segreto.</td>
+            <td>Origina l’entropia da cui BIP-39 costruisce la mnemonic; il seed BIP-39 e la master key BIP-32 sono passaggi successivi.</td>
+          </tr>
+          <tr>
+            <td><strong>Key Derivation</strong> (BIP-39/32/44)</td>
+            <td>Key-stretching computazionale ($PBKDF2$), separazione di domini e derivazione gerarchica deterministica.</td>
+            <td>One-way ($HMAC\text{-}SHA512$)</td>
+            <td>Permette di rigenerare l'intero portafoglio (e infinite sotto-chiavi) da un unico backup di 12-24 parole.</td>
+          </tr>
+          <tr>
+            <td><strong>Public-Key Crypto</strong> (secp256k1)</td>
+            <td>Aritmetica su curve ellittiche ($Q = k \cdot G$). Preserva l'omomorfismo additivo: $(a+b)G = aG + bG$.</td>
+            <td>One-way (Difficoltà ECDLP)</td>
+            <td>Consente la verifica pubblica asimmetrica delle firme digitali (ECDSA) create dalla chiave privata.</td>
+          </tr>
+          <tr>
+            <td><strong>Hashing</strong> (Keccak-256)</td>
+            <td>Costruzione a spugna crittografica ad altissima diffusione, resistente a collisioni e pre-immagini.</td>
+            <td>One-way (Distrugge la struttura)</td>
+            <td>Comprime la chiave pubblica a 160 bit e ne cela la struttura algebrica fino alla prima firma on-chain.</td>
+          </tr>
+          <tr>
+            <td><strong>Checksum</strong> (EIP-55)</td>
+            <td>Capitalizzazione deterministica (mixed-case) pilotata dall'hash dell'indirizzo esadecimale.</td>
+            <td>Verificabile / Rilevatore</td>
+            <td>Rileva errori umani di battitura o copia-incolla senza alterare la lunghezza dell'indirizzo.</td>
+          </tr>
+          <tr>
+            <td><strong>Encoding</strong> (Hex / Mnemonic)</td>
+            <td>Mappatura biunivoca 1-a-1 tra sequenze di bit ed elementi leggibili dall'uomo o dalle macchine.</td>
+            <td>Completamente Reversibile</td>
+            <td>Rappresenta in modo leggibile byte grezzi (es. prefisso `0x` o indici del dizionario BIP-39).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TEMPORAL CONTEXT -->
+    <div class="card">
+      <h2>4. Temporal Context & Architecture Analysis</h2>
+      
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-year">1977</div>
+          <div class="timeline-title">RSA (Rivest, Shamir, Adleman)</div>
+          <p>Nascita della crittografia a chiave pubblica asimmetrica basata sulla fattorizzazione di grandi interi.</p>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2001</div>
+          <div class="timeline-title">SHA-2 / SHA-512 (NIST FIPS 180-2)</div>
+          <p>Standardizzazione della compressione Merkle-Damgård per sostituire SHA-1. Utilizzata da BIP-39 e BIP-32.</p>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2012</div>
+          <div class="timeline-title">BIP-32 (Hierarchical Deterministic Wallets)</div>
+          <p>Superamento dei wallet statici con alberi di derivazione infiniti gestiti da una singola chiave master.</p>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2013</div>
+          <div class="timeline-title">BIP-39 (Mnemonic Code Phrases)</div>
+          <p>Introduzione dello standard human-friendly basato su 12 o 24 parole con dizionario a 2048 termini.</p>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2014</div>
+          <div class="timeline-title">BIP-44 (Multi-Account Standard Derivation Paths)</div>
+          <p>Standardizzazione del derivation path a 5 livelli (`m/44'/60'/0'/0/i` per Ethereum).</p>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2015</div>
+          <div class="timeline-title">NIST SHA-3 (FIPS 202) Standardizzato</div>
+          <p>Adozione ufficiale dell'architettura Keccak da parte del NIST con l'introduzione del domain separation byte (0x06).</p>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2016</div>
+          <div class="timeline-title">EIP-55 (Mixed-Case Address Checksum)</div>
+          <p>EIP-55 introduce un checksum mixed-case che aiuta a rilevare molti errori di trascrizione, ma non garantisce di prevenire ogni errore o perdita.</p>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 24px;">Distinzione: SHA-2 / SHA-512 vs Keccak vs NIST SHA-3</h3>
+      <ul>
+        <li><strong>Merkle-Damgård vs Sponge:</strong> SHA-2 (SHA-512) si basa sulla classica compressione iterativa Merkle-Damgård, vulnerabile all'attacco di estensione della lunghezza (che impone l'uso del costrutto $HMAC$). Keccak impiega invece la costruzione a <em>Spugna Crittografica</em> (stato interno di 1600 bit per Keccak-f[1600]), immune nativamente a tale attacco.</li>
+        <li><strong>Keccak-256 vs NIST SHA3-256:</strong> Ethereum fu implementato tra il 2013 e il 2014, adottando la specifica originale Keccak-256 ($padding = \text{0x01}$). Quando il NIST pubblicò lo standard FIPS 202 nell'agosto 2015, aggiunse 2 bit di domain separation, trasformando il padding in $\text{0x06}$. Pertanto <code>Keccak-256("") ≠ SHA3-256("")</code>. Ethereum mantiene Keccak-256 per garantire la retrocompatibilità del protocollo di consenso.</li>
+      </ul>
+
+      <h3 style="margin-top: 20px;">Perché Ethereum impiega diverse primitive invece di un unico algoritmo?</h3>
+      <p>
+        Ogni primitiva risponde a proprietà matematiche e requisiti incompatibili tra loro:
+      </p>
+      <ul>
+        <li><strong>BIP-39 / BIP-32 / BIP-44:</strong> Ottimizzati per <em>sicurezza umana e isolamento gerarchico</em>. Richiedono computazione intenzionalmente lenta ($PBKDF2$ con 2048 round) per contrastare il brute-force su dizionario e supporto a catena di chiavi indipendenti via HMAC.</li>
+        <li><strong>secp256k1:</strong> Necessario esclusivamente per la <em>firma digitale (ECDSA)</em>. La moltiplicazione scalare $k \cdot G$ preserva la struttura omomorfa additiva, rendendo matematicamente verificabili le transazioni senza esporre la chiave privata. Un algoritmo di hashing non può eseguire firme asimmetriche perché distrugge ogni legame algebrico.</li>
+        <li><strong>Keccak-256:</strong> Fornisce <em>compressione e mascheramento crittografico</em>. Calcola un digest di 256 bit dalla chiave pubblica e ne prende gli ultimi 20 byte per formare l’indirizzo; non è corretto descriverlo semplicemente come una compressione della chiave pubblica per risparmiare spazio nello State Trie. La funzione hash è one-way: fino alla prima transazione inviata, la chiave pubblica secp256k1 rimane sconosciuta alla rete.</li>
+        <li><strong>EIP-55:</strong> È un <em>layer applicativo protettivo a costo zero</em>. Aggiunge ridondanza senza alterare la lunghezza né la compatibilità retroattiva con i sistemi esadecimali preesistenti.</li>
+      </ul>
+    </div>
+
+    <!-- SEZIONE DESCRITTIVA COMPONENTI IN CODA -->
+    <div class="card">
+      <h2>5. Descrizione Dettagliata di Tutte le Componenti della Pipeline</h2>
+      <div style="display: flex; flex-direction: column; gap: 18px; margin-top: 14px;">
+        
+        <div>
+          <h3 style="color: var(--accent);">BIP-39 — Mnemonic Sentence and Seed Generation</h3>
+          <p>
+            Standard introdotto per rimpiazzare le lunghe stringhe esadecimali casuali con frasi leggibili e facilmente trascrivibili dall'uomo. Parte da 128–256 bit di entropia generata in modo sicuro (multipli di 32, per esempio 128 bit per 12 parole o 256 bit per 24 parole), vi accoda un checksum derivato da SHA-256 e suddivide il totale in blocchi da 11 bit. Ciascun blocco corrisponde a una parola estratta da un dizionario standardizzato di 2048 termini (producendo 12, 15, 18, 21 o 24 parole). Successivamente, applica la funzione di derivazione <code>PBKDF2</code> con 2048 iterazioni di <code>HMAC-SHA512</code> usando come salt <code>"mnemonic" + passphrase</code> per ottenere un <strong>seed binario a 512 bit</strong> (64 byte), rallentando gli attacchi brute-force a dizionario.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent-alt);">BIP-32 — Hierarchical Deterministic (HD) Key Derivation</h3>
+          <p>
+            Standard ideato da Pieter Wuille per Bitcoin che consente di derivare un intero albero deterministico di coppie di chiavi a partire dal singolo seed a 512 bit di BIP-39. Calcola <code>HMAC-SHA512(Key = "Bitcoin seed", Data = Seed)</code> e scinde l'output di 64 byte in due componenti da 32 byte:
+          </p>
+          <ul>
+            <li><strong>Master Private Key ($I_L$):</strong> Lo scalare master per l'aritmetica su curve ellittiche.</li>
+            <li><strong>Master Chain Code ($I_R$):</strong> Un valore deterministico di 256 bit derivato dall’HMAC e usato, insieme alla chiave, nella derivazione delle sotto-chiavi. Non è entropia casuale indipendente e non garantisce da solo che ogni compromissione sia innocua: le conseguenze dipendono dal tipo di chiave e dal ramo derivato.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent);">BIP-44 — Standard Derivation Paths for HD Wallets</h3>
+          <p>
+            Stabilisce una convenzione rigorosa e universale per strutturare l'albero gerarchico BIP-32 in cinque livelli semantici:
+            <br><code>m / purpose' / coin_type' / account' / change / address_index</code>
+            <br>Un percorso comunemente usato per account Ethereum è <code>m/44'/60'/0'/0/i</code>. Il valore <code>60'</code> corrisponde all'identificativo registrato di Ethereum (SLIP-0044), mentre l'indice <code>i = 0, 1, 2...</code> seleziona sequenzialmente i diversi account dell'utente dallo stesso albero radice.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent-alt);">secp256k1 — Elliptic-Curve Public-Key Cryptography</h3>
+          <p>
+            La specifica della curva ellittica di Koblitz definita sul campo primo $\mathbb{F}_p$ dall'equazione $y^2 \equiv x^3 + 7 \pmod p$ a 256 bit. La relazione fondamentale tra chiave privata $k$ (uno scalare segreto) e chiave pubblica $Q$ (un punto sulla curva) è data dalla moltiplicazione scalare:
+            $$Q = k \cdot G$$
+            dove $G$ è il generatore base. L'inversione di questa operazione costituisce l'ECDLP (Elliptic Curve Discrete Logarithm Problem), computazionalmente intrattabile. In Ethereum, la chiave pubblica non compressa è la concatenazione raw delle due coordinate $(X \parallel Y)$ su 64 byte, omettendo il prefisso standard <code>0x04</code>.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent);">Keccak-256 — Hash Function used in Ethereum Address Derivation</h3>
+          <p>
+            Funzione hash crittografica basata sul paradigma della <em>spugna</em> con permutazione a 1600 bit (<code>Keccak-f[1600]</code>). Prende in input i 64 byte della chiave pubblica $secp256k1$ e produce un digest a 256 bit (32 byte). L'indirizzo Ethereum è ottenuto scartando i primi 12 byte del digest e conservando **soltanto gli ultimi 20 byte** (160 bit). Questo passaggio svolge due ruoli: riduce l'impronta di memoria nello State Trie di Ethereum a 20 byte e protegge l'utente, poiché la chiave pubblica vera e propria non viene mai esposta sulla rete finché l'account non invia la sua prima transazione firmata.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--success);">EIP-55 — Mixed-Case Checksum Encoding for Ethereum Addresses</h3>
+          <p>
+            Standard per introdurre un meccanismo di controllo degli errori di trascrizione senza modificare la lunghezza degli indirizzi (40 caratteri esadecimali). I software che ignorano la capitalizzazione possono comunque accettare l’indirizzo, ma non verificano il checksum EIP-55. Calcola l'hash Keccak-256 della stringa esadecimale in minuscolo e analizza ogni singolo carattere: se il carattere è alfabetico (da 'a' ad 'f'), viene trasformato in maiuscolo se e solo se il corrispondente nibble dell'hash Keccak è maggiore o uguale a 8 ($\ge 8$). Questo checksum rileva fino al 99.986% degli errori di digitazione accidentali.
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module">
+    import {
+      HDNodeWallet, Mnemonic, SigningKey, keccak256, getBytes, getAddress
+    } from "https://cdn.jsdelivr.net/npm/ethers@6.13.5/+esm";
+
+    const ETH_PATH = "m/44'/60'/0'/0/0";
+    const SECP_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+
+    function bytesToHex(bytes) {
+      return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    }
+    function hexToBytes(hex) {
+      return getBytes("0x" + hex.replace(/^0x/, ""));
+    }
+    function formatStep(title, meta, value, desc, extraClass = "") {
+      return `<div class="step-box ${extraClass}">
+        <div class="step-header"><span class="step-title">${title}</span><span class="step-meta">${meta}</span></div>
+        <div class="step-val">${value}</div><div class="step-desc">${desc}</div>
+      </div>`;
+    }
+    function getWalletFromPhrase(phrase) {
+      const normalized = phrase.trim().replace(/\s+/g, " ").toLowerCase();
+      const mnemonic = Mnemonic.fromPhrase(normalized);
+      const seed = mnemonic.computeSeed();
+      const wallet = HDNodeWallet.fromPhrase(normalized, "", ETH_PATH);
+      return { normalized, mnemonic, seed, wallet };
+    }
+    function renderPipelineUI(data) {
+      const container = document.getElementById("pipelineContainer");
+      container.innerHTML = [
+        formatStep("1. Mnemonic Sentence (BIP-39)", "12/24 parole", data.phrase,
+          "Frase mnemonica fornita come input. Le parole devono appartenere al dizionario BIP-39 e superare il checksum."),
+        formatStep("2. Binary Seed (BIP-39 via PBKDF2)", "512 bit / 64 byte", "0x" + data.seed,
+          "Seed calcolato dalla mnemonic tramite PBKDF2-HMAC-SHA512 con 2048 iterazioni e salt 'mnemonic' (passphrase vuota in questo esempio)."),
+        formatStep("3. BIP-32 Master Extended Key", "HMAC-SHA512", 
+          `<strong>Master private key:</strong> 0x${data.masterPrivateKey}<br><strong>Master chain code:</strong> 0x${data.chainCode}`,
+          "Valori master ricavati con la derivazione HD standard. La master private key e il chain code sono distinti."),
+        formatStep("4. BIP-44 Derivation Path", ETH_PATH,
+          `<strong>Private key dell'account:</strong> 0x${data.privateKey}`,
+          "La chiave dell'account è derivata realmente lungo il percorso BIP-44, non copiata dalla master key."),
+        formatStep("5. Public Key (secp256k1)", "64 byte (X || Y)", "0x" + data.publicKey.slice(4),
+          "Chiave pubblica non compressa: le coordinate X e Y concatenate, senza il prefisso 04 per il calcolo dell'indirizzo Ethereum."),
+        formatStep("6. Keccak-256 Digest", "256 bit / 32 byte", data.digest,
+          "Keccak-256 applicato ai 64 byte della chiave pubblica non compressa."),
+        formatStep("7. Ethereum Address (EIP-55)", "20 byte / 160 bit",
+          `<strong style="color:var(--success)">${data.address}</strong>`,
+          "Gli ultimi 20 byte del digest diventano l'indirizzo; la capitalizzazione EIP-55 aggiunge un checksum leggibile.", "highlight")
+      ].join("");
+    }
+    function deriveData(phrase) {
+      const { normalized, seed, wallet } = getWalletFromPhrase(phrase);
+      const root = HDNodeWallet.fromSeed(getBytes(seed));
+      const pubKey = wallet.signingKey.publicKey;
+      const pubRaw = "0x" + pubKey.slice(4);
+      const digest = keccak256(getBytes(pubRaw));
+      const address = getAddress("0x" + digest.slice(-40));
+      return {
+        phrase: normalized, seed: seed.slice(2),
+        masterPrivateKey: root.privateKey.slice(2),
+        chainCode: root.chainCode.slice(2),
+        privateKey: wallet.privateKey.slice(2),
+        publicKey: pubKey.slice(2), digest, address,
+        rawAddress: "0x" + digest.slice(-40),
+        publicRaw: pubKey.slice(4)
+      };
+    }
+    function runPipelineFromInput() {
+      try {
+        const phrase = document.getElementById("seedInput").value;
+        const data = deriveData(phrase);
+        renderPipelineUI(data);
+        document.getElementById("avalancheLog").innerHTML = "";
+      } catch (err) {
+        alert("Mnemonic non valida o errore di derivazione. Usa una frase BIP-39 valida di 12, 15, 18, 21 o 24 parole. Dettaglio: " + err.message);
+      }
+    }
+    function generateRandomSeed() {
+      const wallet = HDNodeWallet.createRandom();
+      document.getElementById("seedInput").value = wallet.mnemonic.phrase;
+      runPipelineFromInput();
+    }
+    function countHammingDistance(hexA, hexB) {
+      let a = BigInt("0x" + hexA.replace(/^0x/, ""));
+      let b = BigInt("0x" + hexB.replace(/^0x/, ""));
+      let diff = a ^ b, count = 0;
+      while (diff > 0n) { count += Number(diff & 1n); diff >>= 1n; }
+      return count;
+    }
+    function runAvalancheTest() {
+      try {
+        const data = deriveData(document.getElementById("seedInput").value);
+        const original = BigInt(data.privateKey);
+        let flipped = original ^ 1n;
+        if (flipped <= 0n || flipped >= SECP_N) flipped = original ^ 2n;
+        const flippedHex = "0x" + flipped.toString(16).padStart(64, "0");
+        const pubFlip = SigningKey.computePublicKey(flippedHex, false);
+        const rawPubFlip = "0x" + pubFlip.slice(4);
+        const digestFlip = keccak256(getBytes(rawPubFlip));
+        const addrFlip = getAddress("0x" + digestFlip.slice(-40));
+        const hamAddr = countHammingDistance(data.rawAddress, "0x" + digestFlip.slice(-40));
+        const hamPub = countHammingDistance(data.publicRaw, pubFlip.slice(4));
+        const pctAddr = (hamAddr / 160 * 100).toFixed(2);
+        const pctPub = (hamPub / 512 * 100).toFixed(2);
+        document.getElementById("statsGrid").style.display = "grid";
+        document.getElementById("statSacAddr").innerText = pctAddr + "%";
+        document.getElementById("barSacAddr").style.width = pctAddr + "%";
+        document.getElementById("statHamAddr").innerText = `${hamAddr} / 160`;
+        document.getElementById("statSacEc").innerText = pctPub + "%";
+        document.getElementById("barSacEc").style.width = pctPub + "%";
+        document.getElementById("avalancheLog").innerHTML = `<div class="step-box">
+          <div class="step-header"><span class="step-title">Confronto singolo: k vs k ⊕ 1</span></div>
+          <div class="step-val"><strong>Indirizzo originale:</strong> ${data.address}<br>
+          <strong>Indirizzo modificato:</strong> ${addrFlip}<br>
+          <strong>Bit cambiati nell'indirizzo:</strong> ${hamAddr}/160 (${pctAddr}%)<br>
+          <strong>Bit cambiati nella chiave pubblica:</strong> ${hamPub}/512 (${pctPub}%)<br><br>
+          Questo è un singolo esperimento illustrativo, non una dimostrazione dello Strict Avalanche Criterion. Per una valutazione statistica servono molti input e flip di bit indipendenti.</div>
+        </div>`;
+      } catch (err) {
+        alert("Inserisci prima una mnemonic BIP-39 valida. " + err.message);
+      }
+    }
+    document.querySelector('button[onclick="generateRandomSeed()"]').onclick = generateRandomSeed;
+    document.querySelector('button[onclick="runPipelineFromInput()"]').onclick = runPipelineFromInput;
+    document.querySelector('button[onclick="runAvalancheTest()"]').onclick = runAvalancheTest;
+    window.addEventListener("DOMContentLoaded", runPipelineFromInput);
+  </script>
+</body>
+</html>
