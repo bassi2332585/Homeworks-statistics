@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homework 3 — Stochastic Penetration Models & Limit Theorems</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a' },
+            eth: { blue: '#627EEA', purple: '#8A5FFF', dark: '#0f172a' }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    code, pre, .font-mono { font-family: 'Fira Code', monospace; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased">
+
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-eth-blue to-purple-500 flex items-center justify-center shadow-lg shadow-eth-blue/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.522l6-4.5 6 4.5 6-4.5M3 19.5h18M3 7.5h18"/></svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            Cybersecurity Stochastic Simulator
+            <span class="text-xs px-2 py-0.5 rounded-full bg-eth-blue/20 text-eth-blue border border-eth-blue/30 font-medium">Homework 3</span>
+          </h1>
+          <p class="text-xs text-slate-400">Penetration Scores: Bernoulli vs. Rademacher (LLN & CLT Analysis)</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 bg-slate-800/90 p-1 rounded-xl text-xs sm:text-sm font-medium border border-slate-700/60">
+        <button id="tabBtn-bernoulli" onclick="switchTab('bernoulli')" class="px-3 py-1.5 rounded-lg bg-eth-blue text-white shadow-sm transition">
+          1. Bernoulli Model
+        </button>
+        <button id="tabBtn-rademacher" onclick="switchTab('rademacher')" class="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          2. Rademacher Model
+        </button>
+        <button id="tabBtn-metrics" onclick="switchTab('metrics')" class="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          3. Theory vs Simulation
+        </button>
+        <button id="tabBtn-theory" onclick="switchTab('theory')" class="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          4. Theory & Limits
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- TAB 1: BERNOULLI MODEL -->
+    <section id="tab-bernoulli" class="space-y-6">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+              Bernoulli Penetration Model: $X_i \in \{0, 1\}$ with $P(X_i = 1) = p$
+            </h2>
+            <p class="text-xs text-slate-400">Asymmetric model ($\mu = p, \sigma^2 = p(1-p)$). Demonstrates LLN and centering requirement for CLT.</p>
+          </div>
+        </div>
+
+        <!-- Controls & Presets -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div>
+              <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 block">Preset $n$ (Systems)</label>
+              <div class="grid grid-cols-4 gap-1">
+                <button onclick="setBernN(20)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">20</button>
+                <button onclick="setBernN(100)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">100</button>
+                <button onclick="setBernN(500)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">500</button>
+                <button onclick="setBernN(1000)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">1000</button>
+              </div>
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Systems ($n$)</label>
+                <span id="bernNDisp" class="text-xs font-mono text-emerald-400 font-bold">100</span>
+              </div>
+              <input type="range" id="bernN" min="10" max="1000" value="100" onchange="runBernoulli()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-500">
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Attackers ($m$)</label>
+                <span id="bernMDisp" class="text-xs font-mono text-eth-blue font-bold">500</span>
+              </div>
+              <input type="range" id="bernM" min="50" max="2000" value="500" onchange="runBernoulli()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-eth-blue">
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Prob ($p$)</label>
+                <span id="bernPDisp" class="text-xs font-mono text-rose-400 font-bold">0.40</span>
+              </div>
+              <input type="range" id="bernP" min="0.05" max="0.95" step="0.05" value="0.40" onchange="runBernoulli()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-rose-500">
+            </div>
+
+            <button onclick="runBernoulli()" class="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg transition shadow">
+              ▶ Run Bernoulli Simulation
+            </button>
+          </div>
+
+          <div class="md:col-span-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Trajectories of Total Score $S_n$ ($m$ Attackers)</h3>
+            <div class="relative h-60 w-full">
+              <canvas id="bernLineChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Histograms -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-800">
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-1">1. Total Score: $S_n$</h3>
+            <div class="relative h-36 w-full"><canvas id="bernHistSum"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $E[S_n] = np$<br>
+              $Var(S_n) = np(1-p)$<br>
+              <span class="text-slate-500">Variance grows linearly with $n$.</span>
+            </p>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-eth-blue font-semibold mb-1">2. Average Score: $S_n / n$ (LLN)</h3>
+            <div class="relative h-36 w-full"><canvas id="bernHistAvg"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $E[S_n/n] = p$<br>
+              $Var(S_n/n) = \frac{p(1-p)}{n} \to 0$<br>
+              <span class="text-emerald-400">Collapses to $p$ (LLN).</span>
+            </p>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-purple-400 font-semibold mb-1">3. Raw Norm: $S_n / \sqrt{n}$</h3>
+            <div class="relative h-36 w-full"><canvas id="bernHistNorm"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $E[S_n/\sqrt{n}] = p\sqrt{n} \to +\infty$<br>
+              $Var(S_n/\sqrt{n}) = p(1-p)$<br>
+              <span class="text-rose-400">Constant Var, but drifts to $+\infty$!</span>
+            </p>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-amber-400 font-semibold mb-1">4. Standardized $Z_n$ (CLT)</h3>
+            <div class="relative h-36 w-full"><canvas id="bernHistClt"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $Z_n = \frac{S_n - np}{\sqrt{np(1-p)}}$<br>
+              $E[Z_n] = 0, Var(Z_n) = 1$<br>
+              <span class="text-amber-400">Converges to $\mathcal{N}(0,1)$ (CLT).</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: RADEMACHER MODEL -->
+    <section id="tab-rademacher" class="space-y-6 hidden">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+              Rademacher Model: $X_i \in \{-1, +1\}$ with $P(+1) = P(-1) = 1/2$
+            </h2>
+            <p class="text-xs text-slate-400">Symmetric Zero-Mean Model ($\mu=0, \sigma^2=1$). $S_n/\sqrt{n}$ naturally has mean $0$ and variance $1$.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div>
+              <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 block">Preset $n$ (Systems)</label>
+              <div class="grid grid-cols-4 gap-1">
+                <button onclick="setRadN(20)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">20</button>
+                <button onclick="setRadN(100)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">100</button>
+                <button onclick="setRadN(500)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">500</button>
+                <button onclick="setRadN(1000)" class="py-1 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded text-slate-200">1000</button>
+              </div>
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Systems ($n$)</label>
+                <span id="radNDisp" class="text-xs font-mono text-emerald-400 font-bold">200</span>
+              </div>
+              <input type="range" id="radN" min="10" max="1500" value="200" onchange="runRademacher()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-500">
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Attackers ($m$)</label>
+                <span id="radMDisp" class="text-xs font-mono text-eth-blue font-bold">500</span>
+              </div>
+              <input type="range" id="radM" min="50" max="2000" value="500" onchange="runRademacher()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-eth-blue">
+            </div>
+            
+            <div class="p-3 bg-slate-900 rounded border border-slate-800 text-xs">
+              <div class="text-[10px] text-slate-400 uppercase font-semibold">Symmetric Parameters</div>
+              <div class="text-amber-400 font-mono mt-1">Mean $\mu = 0$</div>
+              <div class="text-amber-400 font-mono">Variance $\sigma^2 = 1$</div>
+            </div>
+            
+            <button onclick="runRademacher()" class="w-full py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs rounded-lg transition shadow">
+              ▶ Run Rademacher Simulation
+            </button>
+          </div>
+
+          <div class="md:col-span-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Symmetric Random Walk Trajectories ($S_n$)</h3>
+            <div class="relative h-60 w-full">
+              <canvas id="radLineChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Histograms for Rademacher -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-800">
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-1">1. Total Score: $S_n$</h3>
+            <div class="relative h-36 w-full"><canvas id="radHistSum"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $E[S_n] = 0$<br>
+              $Var(S_n) = n$<br>
+              <span class="text-slate-500">Symmetric, variance grows as $n$.</span>
+            </p>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-eth-blue font-semibold mb-1">2. Average Score: $S_n / n$ (LLN)</h3>
+            <div class="relative h-36 w-full"><canvas id="radHistAvg"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $E[S_n/n] = 0$<br>
+              $Var(S_n/n) = \frac{1}{n} \to 0$<br>
+              <span class="text-emerald-400">Collapses to $0$ (LLN).</span>
+            </p>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-purple-400 font-semibold mb-1">3. Raw Norm: $S_n / \sqrt{n}$ (CLT)</h3>
+            <div class="relative h-36 w-full"><canvas id="radHistNorm"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $E[S_n/\sqrt{n}] = 0$<br>
+              $Var(S_n/\sqrt{n}) = 1$<br>
+              <span class="text-amber-400">Naturally converges to $\mathcal{N}(0,1)$!</span>
+            </p>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <h3 class="text-[11px] uppercase tracking-wider text-amber-400 font-semibold mb-1">4. Standardized $Z_n$ (CLT)</h3>
+            <div class="relative h-36 w-full"><canvas id="radHistClt"></canvas></div>
+            <p class="text-[10px] text-slate-400 mt-2">
+              $Z_n = \frac{S_n - 0}{\sqrt{n \cdot 1}} = \frac{S_n}{\sqrt{n}}$<br>
+              $E[Z_n] = 0, Var(Z_n) = 1$<br>
+              <span class="text-amber-400">Identical to $S_n/\sqrt{n}$ since $\mu=0$.</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: THEORY VS SIMULATION METRICS TABLE -->
+    <section id="tab-metrics" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-base font-bold text-white">3. Experimental vs. Theoretical Convergence Table</h2>
+            <p class="text-xs text-slate-400">Comparing exact analytical formulas against Monte Carlo empirical values ($m$ trajectories of length $n$).</p>
+          </div>
+        </div>
+
+        <!-- Live Metrics Table -->
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left text-xs border border-slate-800 rounded-xl overflow-hidden">
+            <thead class="bg-slate-950 text-slate-300 font-semibold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Model & Quantity</th>
+                <th class="py-3 px-4 text-emerald-400">Theoretical $E[\cdot]$</th>
+                <th class="py-3 px-4 text-emerald-300">Empirical $\bar{x}$</th>
+                <th class="py-3 px-4 text-rose-400">Theoretical $Var(\cdot)$</th>
+                <th class="py-3 px-4 text-rose-300">Empirical $s^2$</th>
+                <th class="py-3 px-4 text-amber-400">Absolute Error $|\bar{x} - E|$</th>
+              </tr>
+            </thead>
+            <tbody id="metricsTableBody" class="divide-y divide-slate-800/80 bg-slate-950/60 font-mono text-[11px]">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-300 leading-relaxed">
+          <strong class="text-amber-400 block mb-1">Key Observations:</strong>
+          <ul class="list-disc list-inside space-y-1 text-slate-400">
+            <li>As $m \to \infty$, the Monte Carlo empirical averages ($\bar{x}$) and sample variances ($s^2$) strictly converge to the theoretical values (Glivenko-Cantelli & Law of Large Numbers).</li>
+            <li>As $n \to \infty$, $Var(S_n/n) = \frac{\sigma^2}{n} \to 0$, providing empirical proof of the Law of Large Numbers.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: THEORETICAL ANALYSIS & MODEL LIMITS -->
+    <section id="tab-theory" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white mb-1">4. Theoretical Synthesis & Model Limitations</h2>
+          <p class="text-xs text-slate-400">Formal mathematical properties of normalizations and conceptual role of $n$ vs $m$.</p>
+        </div>
+
+        <!-- Role of n vs m Box -->
+        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-slate-200 leading-relaxed space-y-2">
+          <div class="flex items-center gap-2 text-amber-400 font-bold text-sm">
+            <span>💡 Conceptual Clarification: Role of $n$ vs. Role of $m$</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
+              <strong class="text-emerald-400 block mb-1">Number of Systems / Steps ($n$):</strong>
+              Governs the <em>asymptotic limit physics</em> of a single trajectory. Increasing $n$ drives convergence in LLN ($S_n/n \to \mu$) and CLT ($Z_n \to \mathcal{N}(0,1)$).
+            </div>
+            <div class="p-3 bg-slate-950 rounded-lg border border-slate-800">
+              <strong class="text-eth-blue block mb-1">Number of Attackers / Trajectories ($m$):</strong>
+              Represents the <em>Monte Carlo sample size</em>. Increasing $m$ does <strong>not</strong> change the theoretical probability $p$ or single-attacker physics (no inter-attacker interaction/collusion modeled). It simply increases histogram resolution and empirical stability (Glivenko-Cantelli Theorem).
+            </div>
+          </div>
+        </div>
+
+        <!-- Table of Theoretical Formulas -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border border-slate-800 rounded-xl overflow-hidden">
+            <thead class="bg-slate-950 text-slate-300 font-semibold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Quantity</th>
+                <th class="py-3 px-4">Formula</th>
+                <th class="py-3 px-4 text-emerald-400">Expected Value $E[\cdot]$</th>
+                <th class="py-3 px-4 text-rose-400">Variance $Var(\cdot)$</th>
+                <th class="py-3 px-4 text-amber-400">Behavior as $n \to \infty$</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/80 bg-slate-950/60 font-mono text-[11px] text-slate-300">
+              <tr>
+                <td class="py-3 px-4 font-sans font-medium text-white">Total Score</td>
+                <td class="py-3 px-4">$S_n = \sum_{i=1}^n X_i$</td>
+                <td class="py-3 px-4">$n\mu$</td>
+                <td class="py-3 px-4">$n\sigma^2$</td>
+                <td class="py-3 px-4">Variance grows linearly ($n\sigma^2 \to \infty$). Distribution spreads.</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-sans font-medium text-white">Average Score (LLN)</td>
+                <td class="py-3 px-4">$S_n / n$</td>
+                <td class="py-3 px-4">$\mu$</td>
+                <td class="py-3 px-4 font-bold text-emerald-400">$\frac{\sigma^2}{n} \to 0$</td>
+                <td class="py-3 px-4 text-emerald-400">Converges in probability to constant mean $\mu$ (LLN).</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-sans font-medium text-white">Raw Normalized Score</td>
+                <td class="py-3 px-4">$S_n / \sqrt{n}$</td>
+                <td class="py-3 px-4">$\mu\sqrt{n}$</td>
+                <td class="py-3 px-4 font-bold text-amber-400">$\sigma^2$ (Constant)</td>
+                <td class="py-3 px-4">Variance is constant, but if $\mu \ne 0$, distribution drifts to $+\infty$.</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-sans font-medium text-white">Centered Standardized (CLT)</td>
+                <td class="py-3 px-4">$Z_n = \frac{S_n - n\mu}{\sigma\sqrt{n}}$</td>
+                <td class="py-3 px-4 font-bold text-emerald-400">$0$</td>
+                <td class="py-3 px-4 font-bold text-emerald-400">$1$</td>
+                <td class="py-3 px-4 text-amber-400">Converges in distribution to Standard Normal $\mathcal{N}(0,1)$ (CLT).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Model Limitations -->
+        <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs text-slate-300 leading-relaxed">
+          <h3 class="font-bold text-white text-sm">Limitations of the Penetration Model in Real-World Cybersecurity</h3>
+          <ul class="list-disc list-inside space-y-2 text-slate-400">
+            <li><strong class="text-slate-200">Independent & Identically Distributed (i.i.d.) Assumption:</strong> Real system defenses adapt dynamically. Penetrating layer $i$ often yields credentials that make layer $i+1$ substantially easier to breach (cascading failure).</li>
+            <li><strong class="text-slate-200">Lack of Attacker Interaction:</strong> The model treats all $m$ attackers as completely independent trajectories. In reality, attackers share exploits (0-day intelligence) or compete for limited server resources.</li>
+            <li><strong class="text-slate-200">Stationary Probabilities:</strong> Defense mechanisms (SIEM, IDS/IPS, automated IP blocking) increase defense strength after initial detection, making $p$ non-stationary over time $i$.</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /* ==========================================================================
+       1. UI TABS & MATH RENDERER
+       ========================================================================== */
+    function switchTab(tabId) {
+      ['bernoulli', 'rademacher', 'metrics', 'theory'].forEach(id => {
+        const el = document.getElementById(`tab-${id}`);
+        const btn = document.getElementById(`tabBtn-${id}`);
+        if (id === tabId) {
+          el.classList.remove('hidden');
+          btn.classList.add('bg-eth-blue', 'text-white');
+          btn.classList.remove('text-slate-300');
+        } else {
+          el.classList.add('hidden');
+          btn.classList.remove('bg-eth-blue', 'text-white');
+          btn.classList.add('text-slate-300');
+        }
+      });
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ]
+        });
+      }
+    }
+
+    function setBernN(val) {
+      document.getElementById('bernN').value = val;
+      runBernoulli();
+    }
+
+    function setRadN(val) {
+      document.getElementById('radN').value = val;
+      runRademacher();
+    }
+
+    /* ==========================================================================
+       2. CHART.JS GLOBALS & HELPERS
+       ========================================================================== */
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.font.family = 'Inter';
+    
+    let charts = {
+      bernLine: null, bernSum: null, bernAvg: null, bernNorm: null, bernClt: null,
+      radLine: null, radSum: null, radAvg: null, radNorm: null, radClt: null
+    };
+
+    function destroyChart(name) {
+      if (charts[name]) {
+        charts[name].destroy();
+        charts[name] = null;
+      }
+    }
+
+    function computeHistogram(data, binsCount) {
+      let min = Math.min(...data);
+      let max = Math.max(...data);
+      if (min === max) { max += 1; min -= 1; }
+      
+      let step = (max - min) / binsCount;
+      let bins = new Array(binsCount).fill(0);
+      
+      data.forEach(val => {
+        let idx = Math.floor((val - min) / step);
+        if (idx >= binsCount) idx = binsCount - 1;
+        bins[idx]++;
+      });
+
+      let labels = Array.from({length: binsCount}, (_, i) => (min + (i + 0.5) * step).toFixed(2));
+      return { labels, bins, min, max, step };
+    }
+
+    function calcEmpiricalStats(arr) {
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const variance = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (arr.length - 1 || 1);
+      return { mean, variance };
+    }
+
+    // Global object storing current empirical & theoretical stats for Tab 3
+    let lastSimStats = {
+      bern: null,
+      rad: null
+    };
+
+    /* ==========================================================================
+       3. BERNOULLI MODEL LOGIC
+       ========================================================================== */
+    function runBernoulli() {
+      const n = parseInt(document.getElementById('bernN').value);
+      const m = parseInt(document.getElementById('bernM').value);
+      const p = parseFloat(document.getElementById('bernP').value);
+      
+      document.getElementById('bernNDisp').textContent = n;
+      document.getElementById('bernMDisp').textContent = m;
+      document.getElementById('bernPDisp').textContent = p.toFixed(2);
+
+      let trajectories = [];
+      let finalSum = [];
+      let finalAvg = [];
+      let finalNorm = [];
+      let finalClt = [];
+
+      const mu = p;
+      const sigma = Math.sqrt(p * (1 - p));
+
+      for (let attacker = 0; attacker < m; attacker++) {
+        let score = 0;
+        let trajectory = [0];
+        for (let step = 1; step <= n; step++) {
+          if (Math.random() < p) score += 1;
+          trajectory.push(score);
+        }
+        trajectories.push(trajectory);
+        finalSum.push(score);
+        finalAvg.push(score / n);
+        finalNorm.push(score / Math.sqrt(n));
+        
+        const zn = (score - n * mu) / (sigma * Math.sqrt(n));
+        finalClt.push(zn);
+      }
+
+      // Save stats for comparison table
+      lastSimStats.bern = {
+        n, m, p, mu, sigmaSq: p*(1-p),
+        sum: { emp: calcEmpiricalStats(finalSum), thMean: n*p, thVar: n*p*(1-p) },
+        avg: { emp: calcEmpiricalStats(finalAvg), thMean: p, thVar: (p*(1-p))/n },
+        norm: { emp: calcEmpiricalStats(finalNorm), thMean: p*Math.sqrt(n), thVar: p*(1-p) },
+        clt: { emp: calcEmpiricalStats(finalClt), thMean: 0, thVar: 1 }
+      };
+
+      // Trajectories Chart
+      destroyChart('bernLine');
+      const ctxLine = document.getElementById('bernLineChart').getContext('2d');
+      const displayM = Math.min(m, 50);
+      let datasets = trajectories.slice(0, displayM).map((traj, idx) => ({
+        label: `Attacker ${idx+1}`,
+        data: traj,
+        borderColor: 'rgba(244, 63, 94, 0.35)',
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }));
+
+      charts.bernLine = new Chart(ctxLine, {
+        type: 'line',
+        data: { labels: Array.from({length: n+1}, (_, i) => i), datasets: datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { title: { display: true, text: 'System Layer (Step i)' }, grid: { color: '#1e293b' } },
+            y: { title: { display: true, text: 'Total Score Sn' }, grid: { color: '#1e293b' }, min: 0 }
+          }
+        }
+      });
+
+      const plotHist = (name, canvasId, data, color) => {
+        destroyChart(name);
+        const hist = computeHistogram(data, 18);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        charts[name] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: hist.labels,
+            datasets: [{ data: hist.bins, backgroundColor: color, borderRadius: 2 }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { maxRotation: 0, font: {size: 8} }, grid: { display: false } },
+              y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { font: {size: 8} } }
+            }
+          }
+        });
+      };
+
+      plotHist('bernSum', 'bernHistSum', finalSum, 'rgba(52, 211, 153, 0.8)');
+      plotHist('bernAvg', 'bernHistAvg', finalAvg, 'rgba(98, 126, 234, 0.8)');
+      plotHist('bernNorm', 'bernHistNorm', finalNorm, 'rgba(168, 85, 247, 0.8)');
+
+      // Standardized CLT Histogram
+      destroyChart('bernClt');
+      const histZn = computeHistogram(finalClt, 20);
+      const area = m * histZn.step;
+      const normalOverlay = histZn.labels.map(xStr => {
+        const x = parseFloat(xStr);
+        const pdf = (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * x * x);
+        return pdf * area;
+      });
+
+      const ctxClt = document.getElementById('bernHistClt').getContext('2d');
+      charts.bernClt = new Chart(ctxClt, {
+        type: 'bar',
+        data: {
+          labels: histZn.labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'N(0,1)',
+              data: normalOverlay,
+              borderColor: '#f59e0b',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            },
+            {
+              type: 'bar',
+              data: histZn.bins,
+              backgroundColor: 'rgba(245, 158, 11, 0.7)',
+              borderRadius: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { maxRotation: 0, font: {size: 8} }, grid: { display: false } },
+            y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { font: {size: 8} } }
+          }
+        }
+      });
+
+      updateMetricsTable();
+    }
+
+    /* ==========================================================================
+       4. RADEMACHER MODEL LOGIC
+       ========================================================================== */
+    function runRademacher() {
+      const n = parseInt(document.getElementById('radN').value);
+      const m = parseInt(document.getElementById('radM').value);
+      
+      document.getElementById('radNDisp').textContent = n;
+      document.getElementById('radMDisp').textContent = m;
+
+      let trajectories = [];
+      let finalSum = [];
+      let finalAvg = [];
+      let finalNorm = [];
+      let finalClt = [];
+
+      for (let attacker = 0; attacker < m; attacker++) {
+        let score = 0;
+        let trajectory = [0];
+        for (let step = 1; step <= n; step++) {
+          score += (Math.random() < 0.5) ? 1 : -1;
+          trajectory.push(score);
+        }
+        trajectories.push(trajectory);
+        finalSum.push(score);
+        finalAvg.push(score / n);
+        finalNorm.push(score / Math.sqrt(n));
+        finalClt.push(score / Math.sqrt(n)); // Same for Rademacher
+      }
+
+      // Save stats for comparison table
+      lastSimStats.rad = {
+        n, m, mu: 0, sigmaSq: 1,
+        sum: { emp: calcEmpiricalStats(finalSum), thMean: 0, thVar: n },
+        avg: { emp: calcEmpiricalStats(finalAvg), thMean: 0, thVar: 1/n },
+        norm: { emp: calcEmpiricalStats(finalNorm), thMean: 0, thVar: 1 },
+        clt: { emp: calcEmpiricalStats(finalClt), thMean: 0, thVar: 1 }
+      };
+
+      // Trajectories Chart
+      destroyChart('radLine');
+      const ctxLine = document.getElementById('radLineChart').getContext('2d');
+      const displayM = Math.min(m, 50);
+      let datasets = trajectories.slice(0, displayM).map((traj) => ({
+        data: traj,
+        borderColor: 'rgba(251, 191, 36, 0.35)',
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }));
+
+      charts.radLine = new Chart(ctxLine, {
+        type: 'line',
+        data: { labels: Array.from({length: n+1}, (_, i) => i), datasets: datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { title: { display: true, text: 'Step i' }, grid: { color: '#1e293b' } },
+            y: { title: { display: true, text: 'Random Walk Sn' }, grid: { color: '#1e293b' } }
+          }
+        }
+      });
+
+      const plotHist = (name, canvasId, data, color) => {
+        destroyChart(name);
+        const hist = computeHistogram(data, 18);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        charts[name] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: hist.labels,
+            datasets: [{ data: hist.bins, backgroundColor: color, borderRadius: 2 }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { maxRotation: 0, font: {size: 8} }, grid: { display: false } },
+              y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { font: {size: 8} } }
+            }
+          }
+        });
+      };
+
+      plotHist('radSum', 'radHistSum', finalSum, 'rgba(52, 211, 153, 0.8)');
+      plotHist('radAvg', 'radHistAvg', finalAvg, 'rgba(98, 126, 234, 0.8)');
+
+      // Plot Normalized & Standardized Histograms with N(0,1) overlay
+      const plotCltOverlay = (name, canvasId, data, color, borderCol) => {
+        destroyChart(name);
+        const hist = computeHistogram(data, 20);
+        const area = m * hist.step;
+        const normalOverlay = hist.labels.map(xStr => {
+          const x = parseFloat(xStr);
+          const pdf = (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * x * x);
+          return pdf * area;
+        });
+
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        charts[name] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: hist.labels,
+            datasets: [
+              {
+                type: 'line',
+                label: 'N(0,1)',
+                data: normalOverlay,
+                borderColor: borderCol,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: false
+              },
+              {
+                type: 'bar',
+                data: hist.bins,
+                backgroundColor: color,
+                borderRadius: 2
+              }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { maxRotation: 0, font: {size: 8} }, grid: { display: false } },
+              y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { font: {size: 8} } }
+            }
+          }
+        });
+      };
+
+      plotCltOverlay('radNorm', 'radHistNorm', finalNorm, 'rgba(168, 85, 247, 0.7)', '#f43f5e');
+      plotCltOverlay('radClt', 'radHistClt', finalClt, 'rgba(245, 158, 11, 0.7)', '#f59e0b');
+
+      updateMetricsTable();
+    }
+
+    /* ==========================================================================
+       5. METRICS COMPARISON TABLE UPDATER
+       ========================================================================== */
+    function updateMetricsTable() {
+      const tbody = document.getElementById('metricsTableBody');
+      if (!tbody || !lastSimStats.bern || !lastSimStats.rad) return;
+
+      const rows = [];
+      const addRow = (modelName, qName, statObj) => {
+        const errMean = Math.abs(statObj.emp.mean - statObj.thMean).toFixed(4);
+        rows.push(`
+          <tr class="hover:bg-slate-900/50 transition">
+            <td class="py-2 px-4 font-sans font-medium text-slate-200">${modelName} — ${qName}</td>
+            <td class="py-2 px-4 text-emerald-400">${statObj.thMean.toFixed(4)}</td>
+            <td class="py-2 px-4 text-emerald-300 font-bold">${statObj.emp.mean.toFixed(4)}</td>
+            <td class="py-2 px-4 text-rose-400">${statObj.thVar.toFixed(4)}</td>
+            <td class="py-2 px-4 text-rose-300 font-bold">${statObj.emp.variance.toFixed(4)}</td>
+            <td class="py-2 px-4 text-amber-400 font-bold">${errMean}</td>
+          </tr>
+        `);
+      };
+
+      const b = lastSimStats.bern;
+      addRow(`Bernoulli (n=${b.n}, m=${b.m}, p=${b.p})`, 'Total Score Sn', b.sum);
+      addRow(`Bernoulli (n=${b.n}, m=${b.m}, p=${b.p})`, 'Average Sn / n', b.avg);
+      addRow(`Bernoulli (n=${b.n}, m=${b.m}, p=${b.p})`, 'Raw Norm Sn / √n', b.norm);
+      addRow(`Bernoulli (n=${b.n}, m=${b.m}, p=${b.p})`, 'Standardized Zn', b.clt);
+
+      const r = lastSimStats.rad;
+      addRow(`Rademacher (n=${r.n}, m=${r.m})`, 'Total Score Sn', r.sum);
+      addRow(`Rademacher (n=${r.n}, m=${r.m})`, 'Average Sn / n', r.avg);
+      addRow(`Rademacher (n=${r.n}, m=${r.m})`, 'Raw Norm Sn / √n', r.norm);
+      addRow(`Rademacher (n=${r.n}, m=${r.m})`, 'Standardized Zn', r.clt);
+
+      tbody.innerHTML = rows.join('');
+    }
+
+    /* ==========================================================================
+       INIT ON LOAD
+       ========================================================================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      runBernoulli();
+      runRademacher();
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ]
+        });
+      }
+    });
+  </script>
+</body>
+</html>
