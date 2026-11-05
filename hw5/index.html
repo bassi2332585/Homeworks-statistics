@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homework 4 — Welford's Recurrence, Sampling Mean & Variance</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a' },
+            eth: { blue: '#627EEA', purple: '#8A5FFF', dark: '#0f172a' }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    code, pre, .font-mono { font-family: 'Fira Code', monospace; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased">
+
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-eth-blue to-purple-500 flex items-center justify-center shadow-lg shadow-eth-blue/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            Cybersecurity Stochastic Lab
+            <span class="text-xs px-2 py-0.5 rounded-full bg-eth-blue/20 text-eth-blue border border-eth-blue/30 font-medium">Homework 4</span>
+          </h1>
+          <p class="text-xs text-slate-400">Welford's Algorithm, Sampling Mean & Variance, and Inferential Statistics</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 bg-slate-800/90 p-1 rounded-xl text-xs sm:text-sm font-medium border border-slate-700/60">
+        <button id="tabBtn-ex1" onclick="switchTab('ex1')" class="px-3.5 py-1.5 rounded-lg bg-eth-blue text-white shadow-sm transition">
+          1. Welford's Derivation
+        </button>
+        <button id="tabBtn-ex2" onclick="switchTab('ex2')" class="px-3.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          2. Hacker Simulation
+        </button>
+        <button id="tabBtn-variability" onclick="switchTab('variability')" class="px-3.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          3. Effect of n (Variability)
+        </button>
+        <button id="tabBtn-theory" onclick="switchTab('theory')" class="px-3.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+          4. Inferential Theory
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- TAB 1: WELFORD DERIVATION & CODE -->
+    <section id="tab-ex1" class="space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white mb-1">Exercise 1: Derivation of Welford's Recurrence Formulas</h2>
+          <p class="text-xs text-slate-400">Online, numerically stable algorithm for computing sample mean, sum of squares (SS), and variance in a single pass.</p>
+        </div>
+
+        <!-- Derivation Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed">
+          <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <h3 class="font-bold text-eth-blue text-sm border-b border-slate-800 pb-2">1. Mathematical Proof for Mean & Sum of Squares</h3>
+            <p>Let $ ar{x}_k$ be the mean of the first $k$ data points $x_1, \dots, x_k$. Knuth's recurrence for the mean is:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-emerald-400 text-center">
+              $$  ar{x}_k =  ar{x}_{k-1} + rac{x_k -  ar{x}_{k-1}}{k} $$
+            </div>
+            <p>Define the sum of squared differences $M_k = SS_k = \sum_{i=1}^k (x_i -  ar{x}_k)^2$. To express $M_k$ in terms of $M_{k-1}$:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-slate-300 space-y-1">
+              $$ M_k - M_{k-1} = \sum_{i=1}^k (x_i -  ar{x}_k)^2 - \sum_{i=1}^{k-1} (x_i -  ar{x}_{k-1})^2 $$
+              $$ = (x_k -  ar{x}_k)^2 + \sum_{i=1}^{k-1} \left[ (x_i -  ar{x}_k)^2 - (x_i -  ar{x}_{k-1})^2 
+ight] $$
+            </div>
+            <p>Using the identity $(a-b)^2 - (a-c)^2 = (c-b)(2a - b - c)$ with $b= ar{x}_k$ and $c= ar{x}_{k-1}$:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-amber-400 text-center">
+              $$ M_k = M_{k-1} + (x_k -  ar{x}_{k-1})(x_k -  ar{x}_k) $$
+            </div>
+            <p>Sample variance $s_k^2$ (with Bessel's correction $k-1$) and population variance $\sigma_k^2$ are then given by:</p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-emerald-400 text-center">
+              $$ s_k^2 = rac{M_k}{k-1} \quad 	ext{for } k \ge 2, \qquad \sigma_k^2 = rac{M_k}{k} $$
+            </div>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-4 flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-amber-400 text-sm border-b border-slate-800 pb-2 mb-3">2. Concise Code Implementation (Core 3 Lines)</h3>
+              <p class="mb-3 text-slate-400">The core algorithm requires updating three state variables per data point $x_k$ at step $k$:</p>
+              
+              <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 font-mono text-xs space-y-2 text-slate-200">
+                <div class="text-slate-500">// Core 3-line update logic per item x at step k</div>
+                <div class="text-emerald-400">const delta = x - mean;</div>
+                <div class="text-emerald-400">mean += delta / k;</div>
+                <div class="text-emerald-400">M += delta * (x - mean); <span class="text-slate-500">// M = SS_k</span></div>
+                <div class="text-slate-500 pt-2">// Sample variance: s2 = M / (k - 1)</div>
+              </div>
+            </div>
+
+            <!-- Live Verification Demo Box -->
+            <div class="p-4 bg-slate-900 rounded-xl border border-slate-800 space-y-3">
+              <h4 class="text-xs font-bold text-white uppercase tracking-wider">Live Algorithmic Numerical Stability Test</h4>
+              <p class="text-[11px] text-slate-400">Test Welford's algorithm vs Naive formula $\sum x^2 - (\sum x)^2/n$ on large offset values $x \sim 10^9 + [0, 10]$:</p>
+              <button onclick="runNumericalTest()" class="px-3 py-1.5 bg-eth-blue hover:bg-blue-600 rounded text-xs font-semibold text-white transition">
+                ⚡ Run Numerical Stability Test
+              </button>
+              <div id="numericalTestOutput" class="font-mono text-[11px] text-slate-300 space-y-1">
+                Click button to execute test...
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: EX2 HACKER SIMULATION -->
+    <section id="tab-ex2" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-emerald-400 inline-block"></span>
+              Exercise 2: Sampling Penetration Scores ($m$ Hackers, $n$ Systems)
+            </h2>
+            <p class="text-xs text-slate-400">Each penetration attempt receives a score between $0$ and $10$ drawn from a selected probability distribution.</p>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div>
+              <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 block">Score Distribution</label>
+              <select id="distSelect" onchange="runHackerSimulation()" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200">
+                <option value="discreteUniform">Discrete Uniform [0, 10]</option>
+                <option value="continuousUniform">Continuous Uniform [0, 10]</option>
+                <option value="triangular">Triangular [0, 10] (Peak=5)</option>
+                <option value="binomial">Binomial B(10, p=0.4)</option>
+              </select>
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Systems ($n$)</label>
+                <span id="hackerNDisp" class="text-xs font-mono text-emerald-400 font-bold">100</span>
+              </div>
+              <input type="range" id="hackerN" min="10" max="1000" value="100" onchange="runHackerSimulation()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-500">
+            </div>
+
+            <div class="pt-1">
+              <div class="flex justify-between items-center">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Hackers ($m$)</label>
+                <span id="hackerMDisp" class="text-xs font-mono text-eth-blue font-bold">500</span>
+              </div>
+              <input type="range" id="hackerM" min="50" max="2000" value="500" onchange="runHackerSimulation()" class="w-full h-2 bg-slate-800 rounded appearance-none cursor-pointer accent-eth-blue">
+            </div>
+
+            <div class="p-3 bg-slate-900 rounded border border-slate-800 text-[11px] space-y-1 font-mono">
+              <div class="text-slate-400 uppercase font-sans text-[10px] font-bold">Theoretical Parameters</div>
+              <div>$\mu$ (Mean): <span id="theoMeanDisp" class="text-emerald-400 font-bold">5.0000</span></div>
+              <div>$\sigma^2$ (Var): <span id="theoVarDisp" class="text-rose-400 font-bold">10.0000</span></div>
+            </div>
+
+            <button onclick="runHackerSimulation()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-lg transition shadow">
+              ▶ Run Simulation
+            </button>
+          </div>
+
+          <div class="md:col-span-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Sample Trajectories of Scores ($m$ Hackers over $n$ Systems)</h3>
+            <div class="relative h-60 w-full">
+              <canvas id="trajectoryLineChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dual Histograms for Sampling Means and Sampling Variances -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-xs uppercase tracking-wider text-eth-blue font-semibold">Distribution of Sampling Means ($ ar{X}_j$)</h3>
+              <span class="text-[11px] font-mono text-slate-400">Grand Avg: <strong id="empMeanAvg" class="text-emerald-400">—</strong></span>
+            </div>
+            <div class="relative h-48 w-full"><canvas id="histSamplingMeans"></canvas></div>
+            <p class="text-[11px] text-slate-400 mt-2">Expectation $E[ ar{X}] = \mu$. Variance shrinks as $Var( ar{X}) = rac{\sigma^2}{n}$.</p>
+          </div>
+
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-xs uppercase tracking-wider text-purple-400 font-semibold">Distribution of Sampling Variances ($s_j^2$)</h3>
+              <span class="text-[11px] font-mono text-slate-400">Grand Avg: <strong id="empVarAvg" class="text-rose-400">—</strong></span>
+            </div>
+            <div class="relative h-48 w-full"><canvas id="histSamplingVars"></canvas></div>
+            <p class="text-[11px] text-slate-400 mt-2">Expectation $E[s^2] = \sigma^2$ (Unbiased thanks to $n-1$).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: EFFECT OF N (VARIABILITY ANALYSIS) -->
+    <section id="tab-variability" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white mb-1">3. Effect of $n$ (Number of Systems Attempted) on Variability</h2>
+          <p class="text-xs text-slate-400">Investigating how increasing system depth $n$ shrinks the variance of sampling means $Var( ar{X})$ and sampling variances $Var(s^2)$.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between bg-slate-950 p-4 rounded-xl border border-slate-800 gap-3">
+          <div class="text-xs text-slate-300">
+            Click to run Monte Carlo experiment across $n \in \{10, 50, 200, 1000\}$ with $m = 1000$ hackers:
+          </div>
+          <button onclick="runVariabilityExperiment()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 font-bold text-xs text-white rounded-lg transition shadow">
+            🧪 Run Multi-$n$ Experiment
+          </button>
+        </div>
+
+        <!-- Multi-N Comparison Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border border-slate-800 rounded-xl overflow-hidden">
+            <thead class="bg-slate-950 text-slate-300 font-semibold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Systems ($n$)</th>
+                <th class="py-3 px-4 text-emerald-400">Avg of Sample Means $\overline{ ar{X}}$</th>
+                <th class="py-3 px-4 text-emerald-300">Variance of Means $Var( ar{X})$</th>
+                <th class="py-3 px-4 text-emerald-200">Theoretical $\sigma^2/n$</th>
+                <th class="py-3 px-4 text-rose-400">Avg of Sample Vars $\overline{s^2}$</th>
+                <th class="py-3 px-4 text-rose-300">Variance of Vars $Var(s^2)$</th>
+              </tr>
+            </thead>
+            <tbody id="variabilityTableBody" class="divide-y divide-slate-800/80 bg-slate-950/60 font-mono text-[11px]">
+              <tr><td colspan="6" class="py-4 text-center text-slate-500 font-sans">Click "Run Multi-n Experiment" to generate live data.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Visual Graphs of Variances vs n -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <h3 class="text-xs uppercase tracking-wider text-emerald-400 font-semibold mb-2">$Var( ar{X})$ vs. Systems Attempted ($n$)</h3>
+            <div class="relative h-48 w-full"><canvas id="varMeansChart"></canvas></div>
+            <p class="text-[10px] text-slate-500 mt-2">Demonstrates $Var( ar{X}) = \sigma^2 / n 	o 0$ as $n 	o \infty$.</p>
+          </div>
+
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <h3 class="text-xs uppercase tracking-wider text-rose-400 font-semibold mb-2">$Var(s^2)$ vs. Systems Attempted ($n$)</h3>
+            <div class="relative h-48 w-full"><canvas id="varVarsChart"></canvas></div>
+            <p class="text-[10px] text-slate-500 mt-2">Demonstrates variance of sample variance decays as $\mathcal{O}(1/n)$.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 4: THEORETICAL ANALYSIS & INFERENTIAL QUESTIONS -->
+    <section id="tab-theory" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white mb-1">4. Statistical Inference & Theoretical Answers</h2>
+          <p class="text-xs text-slate-400">Formal answers to homework questions, unbiasedness proofs, and cybersecurity applications.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed">
+          <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <h3 class="font-bold text-emerald-400 text-sm border-b border-slate-800 pb-2">1. Comparison of Averages & Unbiasedness</h3>
+            <p>
+              When we compute the grand average of sample means $\overline{ ar{X}} = rac{1}{m} \sum_{j=1}^m  ar{X}_j$ and the grand average of sample variances $\overline{s^2} = rac{1}{m} \sum_{j=1}^m s_j^2$, we observe:
+            </p>
+            <div class="p-2.5 bg-slate-900 rounded font-mono text-center text-emerald-400 space-y-1">
+              $$ \lim_{m 	o \infty} \overline{ ar{X}} = \mu, \qquad \lim_{m 	o \infty} \overline{s^2} = \sigma^2 $$
+            </div>
+            <p>
+              <strong>Key Conclusion:</strong> Both the sample mean $ ar{X}$ and the sample variance $s^2$ (with Bessel's correction $n-1$) are <strong>unbiased estimators</strong> of the true population parameters $\mu$ and $\sigma^2$:
+            </p>
+            <div class="p-2 bg-slate-900 rounded font-mono text-center text-amber-400">
+              $$ E[ ar{X}] = \mu, \qquad E[s^2] = \sigma^2 $$
+            </div>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <h3 class="font-bold text-eth-blue text-sm border-b border-slate-800 pb-2">2. Why Results Are Useful in Inferential Statistics</h3>
+            <p>
+              In real-world cybersecurity, an analyst rarely knows the true theoretical distribution parameters ($\mu, \sigma^2$) of all possible penetration attempts across the globe.
+            </p>
+            <ul class="list-disc list-inside space-y-1 text-slate-400">
+              <li><strong class="text-slate-200">Point Estimation:</strong> Unbiasedness guarantees that our empirical estimates do not systematically overestimate or underestimate security risk.</li>
+              <li><strong class="text-slate-200">Bessel's Correction ($n-1$):</strong> Dividing by $n-1$ instead of $n$ accounts for the degree of freedom lost when estimating the mean from the sample itself.</li>
+              <li><strong class="text-slate-200">Confidence Intervals:</strong> Knowing that $Var( ar{X}) = rac{\sigma^2}{n}$ allows computing exact margin of errors: $ ar{X} \pm z \cdot rac{s}{\sqrt{n}}$.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs text-slate-300 leading-relaxed">
+          <h3 class="font-bold text-purple-400 text-sm border-b border-slate-800 pb-2">3. Impact of Increasing $n$ (Systems Attempted per Hacker)</h3>
+          <p>
+            As $n$ increases, two fundamental statistical phenomena occur:
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div class="p-3 bg-slate-900 rounded-lg border border-slate-800">
+              <strong class="text-emerald-400 block mb-1">Shrinking Dispersion of Sample Means:</strong>
+              The variance of sample means decreases at rate $\mathcal{O}(1/n)$: $Var( ar{X}) = rac{\sigma^2}{n}$. Individual hacker average scores cluster tightly around $\mu$.
+            </div>
+            <div class="p-3 bg-slate-900 rounded-lg border border-slate-800">
+              <strong class="text-amber-400 block mb-1">Shrinking Dispersion of Sample Variances:</strong>
+              The variance of $s^2$ decays proportionally to $rac{1}{n-1}$. For Gaussian data, $Var(s^2) = rac{2\sigma^4}{n-1}$. As $n$ grows, every single hacker's measured variance $s_j^2$ becomes an extremely precise estimate of $\sigma^2$.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /* ==========================================================================
+       1. UI TAB NAVIGATION & MATH RENDERER
+       ========================================================================== */
+    function switchTab(tabId) {
+      ['ex1', 'ex2', 'variability', 'theory'].forEach(id => {
+        const el = document.getElementById(`tab-${id}`);
+        const btn = document.getElementById(`tabBtn-${id}`);
+        if (id === tabId) {
+          el.classList.remove('hidden');
+          btn.classList.add('bg-eth-blue', 'text-white');
+          btn.classList.remove('text-slate-300');
+        } else {
+          el.classList.add('hidden');
+          btn.classList.remove('bg-eth-blue', 'text-white');
+          btn.classList.add('text-slate-300');
+        }
+      });
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ]
+        });
+      }
+    }
+
+    /* ==========================================================================
+       2. EXERCISE 1: WELFORD'S ALGORITHM IMPLEMENTATION & STABILITY TEST
+       ========================================================================== */
+    // Core Welford Class (3 lines core logic)
+    class Welford {
+      constructor() {
+        this.k = 0;
+        this.mean = 0;
+        this.M = 0; // Sum of Squares SS
+      }
+      update(x) {
+        this.k++;
+        const delta = x - this.mean;
+        this.mean += delta / this.k;
+        this.M += delta * (x - this.mean); // Core 3 lines
+      }
+      get sampleVariance() { return this.k > 1 ? this.M / (this.k - 1) : 0; }
+      get populationVariance() { return this.k > 0 ? this.M / this.k : 0; }
+    }
+
+    function runNumericalTest() {
+      const out = document.getElementById('numericalTestOutput');
+      // Generate large values with small variance: x = 10^9 + [1..10]
+      const offset = 1e9;
+      const data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => offset + v);
+      
+      // True variance of 1..10 is 9.166666666666666
+      const trueVar = 9.166666666666666;
+
+      // 1. Welford
+      const w = new Welford();
+      data.forEach(x => w.update(x));
+      const welfordVar = w.sampleVariance;
+
+      // 2. Naive Formula: sum(x^2) - (sum x)^2 / n
+      let sum = 0, sumSq = 0;
+      data.forEach(x => { sum += x; sumSq += x * x; });
+      const naiveVar = (sumSq - (sum * sum) / data.length) / (data.length - 1);
+
+      out.innerHTML = `
+        <div class="text-emerald-400">✔️ True Sample Variance: <strong>${trueVar.toFixed(6)}</strong></div>
+        <div class="text-emerald-300">✔️ Welford's Algorithm: <strong>${welfordVar.toFixed(6)}</strong> (Error: 0.0000)</div>
+        <div class="text-rose-400">❌ Naive Formula (Catastrophic Cancellation): <strong>${naiveVar.toFixed(6)}</strong></div>
+      `;
+    }
+
+    /* ==========================================================================
+       3. PROBABILITY DISTRIBUTIONS FOR EXERCISE 2
+       ========================================================================== */
+    const DISTRIBUTIONS = {
+      discreteUniform: {
+        name: "Discrete Uniform [0, 10]",
+        sample: () => Math.floor(Math.random() * 11), // 0..10 integers
+        mean: 5.0,
+        var: 10.0 // (11^2 - 1) / 12 = 120 / 12 = 10.0
+      },
+      continuousUniform: {
+        name: "Continuous Uniform [0, 10]",
+        sample: () => Math.random() * 10,
+        mean: 5.0,
+        var: 100 / 12 // 8.333333
+      },
+      triangular: {
+        name: "Triangular [0, 10] Peak=5",
+        sample: () => {
+          const u1 = Math.random(), u2 = Math.random();
+          return (u1 + u2) * 5;
+        },
+        mean: 5.0,
+        var: 100 / 24 // 4.166667
+      },
+      binomial: {
+        name: "Binomial B(10, p=0.4)",
+        sample: () => {
+          let successes = 0;
+          for (let i = 0; i < 10; i++) if (Math.random() < 0.4) successes++;
+          return successes;
+        },
+        mean: 4.0, // n*p = 10*0.4 = 4
+        var: 2.4   // n*p*(1-p) = 10*0.4*0.6 = 2.4
+      }
+    };
+
+    /* ==========================================================================
+       4. CHART.JS GLOBALS & SIMULATION LOGIC
+       ========================================================================== */
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.font.family = 'Inter';
+    
+    let charts = {
+      trajLine: null, histMeans: null, histVars: null,
+      varMeans: null, varVars: null
+    };
+
+    function destroyChart(name) {
+      if (charts[name]) {
+        charts[name].destroy();
+        charts[name] = null;
+      }
+    }
+
+    function computeHistogram(data, binsCount) {
+      let min = Math.min(...data);
+      let max = Math.max(...data);
+      if (min === max) { max += 1; min -= 1; }
+      
+      let step = (max - min) / binsCount;
+      let bins = new Array(binsCount).fill(0);
+      
+      data.forEach(val => {
+        let idx = Math.floor((val - min) / step);
+        if (idx >= binsCount) idx = binsCount - 1;
+        bins[idx]++;
+      });
+
+      let labels = Array.from({length: binsCount}, (_, i) => (min + (i + 0.5) * step).toFixed(2));
+      return { labels, bins, min, max, step };
+    }
+
+    function runHackerSimulation() {
+      const distKey = document.getElementById('distSelect').value;
+      const dist = DISTRIBUTIONS[distKey];
+      const n = parseInt(document.getElementById('hackerN').value);
+      const m = parseInt(document.getElementById('hackerM').value);
+
+      document.getElementById('hackerNDisp').textContent = n;
+      document.getElementById('hackerMDisp').textContent = m;
+      document.getElementById('theoMeanDisp').textContent = dist.mean.toFixed(4);
+      document.getElementById('theoVarDisp').textContent = dist.var.toFixed(4);
+
+      let trajectories = [];
+      let sampleMeans = [];
+      let sampleVars = [];
+
+      // Run simulation for m hackers
+      for (let j = 0; j < m; j++) {
+        const welf = new Welford();
+        let traj = [0];
+        let cumSum = 0;
+        for (let step = 1; step <= n; step++) {
+          const score = dist.sample();
+          welf.update(score);
+          cumSum += score;
+          traj.push(cumSum / step); // running average trajectory
+        }
+        trajectories.push(traj);
+        sampleMeans.push(welf.mean);
+        sampleVars.push(welf.sampleVariance);
+      }
+
+      // Grand Averages across m hackers
+      const grandAvgMean = sampleMeans.reduce((a, b) => a + b, 0) / m;
+      const grandAvgVar = sampleVars.reduce((a, b) => a + b, 0) / m;
+
+      document.getElementById('empMeanAvg').textContent = `${grandAvgMean.toFixed(4)} (Diff: ${Math.abs(grandAvgMean - dist.mean).toFixed(4)})`;
+      document.getElementById('empVarAvg').textContent = `${grandAvgVar.toFixed(4)} (Diff: ${Math.abs(grandAvgVar - dist.var).toFixed(4)})`;
+
+      // Plot Trajectories (Sub-sample up to 40 visual trajectories)
+      destroyChart('trajLine');
+      const ctxLine = document.getElementById('trajectoryLineChart').getContext('2d');
+      const displayM = Math.min(m, 40);
+      let datasets = trajectories.slice(0, displayM).map((traj, idx) => ({
+        label: `Hacker ${idx+1}`,
+        data: traj,
+        borderColor: 'rgba(98, 126, 234, 0.35)',
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }));
+
+      charts.trajLine = new Chart(ctxLine, {
+        type: 'line',
+        data: { labels: Array.from({length: n+1}, (_, i) => i), datasets: datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { title: { display: true, text: 'System Index (Step i)' }, grid: { color: '#1e293b' } },
+            y: { title: { display: true, text: 'Running Sample Mean' }, grid: { color: '#1e293b' } }
+          }
+        }
+      });
+
+      // Plot Histograms for Means and Variances
+      const plotHist = (name, canvasId, data, color) => {
+        destroyChart(name);
+        const hist = computeHistogram(data, 20);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        charts[name] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: hist.labels,
+            datasets: [{ data: hist.bins, backgroundColor: color, borderRadius: 2 }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { maxRotation: 0, font: {size: 9} }, grid: { display: false } },
+              y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { font: {size: 9} } }
+            }
+          }
+        });
+      };
+
+      plotHist('histMeans', 'histSamplingMeans', sampleMeans, 'rgba(98, 126, 234, 0.8)');
+      plotHist('histVars', 'histSamplingVars', sampleVars, 'rgba(168, 85, 247, 0.8)');
+    }
+
+    /* ==========================================================================
+       5. VARIABILITY EXPERIMENT ACROSS MULTIPLE N
+       ========================================================================== */
+    function runVariabilityExperiment() {
+      const distKey = document.getElementById('distSelect').value;
+      const dist = DISTRIBUTIONS[distKey];
+      const nValues = [10, 50, 200, 1000];
+      const m = 1000;
+
+      let results = [];
+
+      nValues.forEach(n => {
+        let means = [];
+        let vars = [];
+        for (let j = 0; j < m; j++) {
+          const welf = new Welford();
+          for (let step = 0; step < n; step++) {
+            welf.update(dist.sample());
+          }
+          means.push(welf.mean);
+          vars.push(welf.sampleVariance);
+        }
+
+        const avgMean = means.reduce((a, b) => a + b, 0) / m;
+        const avgVar = vars.reduce((a, b) => a + b, 0) / m;
+        
+        // Variance of sample means
+        const varOfMeans = means.reduce((a, b) => a + Math.pow(b - avgMean, 2), 0) / (m - 1);
+        // Variance of sample variances
+        const varOfVars = vars.reduce((a, b) => a + Math.pow(b - avgVar, 2), 0) / (m - 1);
+
+        const theoreticalVarOfMeans = dist.var / n;
+
+        results.push({ n, avgMean, varOfMeans, theoreticalVarOfMeans, avgVar, varOfVars });
+      });
+
+      // Render Table
+      const tbody = document.getElementById('variabilityTableBody');
+      tbody.innerHTML = results.map(r => `
+        <tr class="hover:bg-slate-900/50 transition">
+          <td class="py-2.5 px-4 font-bold text-white">n = ${r.n}</td>
+          <td class="py-2.5 px-4 text-emerald-400 font-bold">${r.avgMean.toFixed(4)}</td>
+          <td class="py-2.5 px-4 text-emerald-300">${r.varOfMeans.toFixed(6)}</td>
+          <td class="py-2.5 px-4 text-emerald-200">${r.theoreticalVarOfMeans.toFixed(6)}</td>
+          <td class="py-2.5 px-4 text-rose-400 font-bold">${r.avgVar.toFixed(4)}</td>
+          <td class="py-2.5 px-4 text-rose-300">${r.varOfVars.toFixed(6)}</td>
+        </tr>
+      `).join('');
+
+      // Render Charts
+      destroyChart('varMeans');
+      const ctxVM = document.getElementById('varMeansChart').getContext('2d');
+      charts.varMeans = new Chart(ctxVM, {
+        type: 'line',
+        data: {
+          labels: nValues.map(n => `n=${n}`),
+          datasets: [
+            { label: 'Empirical Var(X_bar)', data: results.map(r => r.varOfMeans), borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.2)', fill: true, tension: 0.3 },
+            { label: 'Theoretical σ²/n', data: results.map(r => r.theoreticalVarOfMeans), borderColor: '#38bdf8', borderDash: [4, 4], fill: false, tension: 0.3 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#cbd5e1', font: {size: 10} } } },
+          scales: {
+            x: { grid: { color: '#1e293b' } },
+            y: { grid: { color: '#1e293b' }, beginAtZero: true }
+          }
+        }
+      });
+
+      destroyChart('varVars');
+      const ctxVV = document.getElementById('varVarsChart').getContext('2d');
+      charts.varVars = new Chart(ctxVV, {
+        type: 'line',
+        data: {
+          labels: nValues.map(n => `n=${n}`),
+          datasets: [
+            { label: 'Empirical Var(s²)', data: results.map(r => r.varOfVars), borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.2)', fill: true, tension: 0.3 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#cbd5e1', font: {size: 10} } } },
+          scales: {
+            x: { grid: { color: '#1e293b' } },
+            y: { grid: { color: '#1e293b' }, beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    /* ==========================================================================
+       INIT ON LOAD
+       ========================================================================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      runNumericalTest();
+      runHackerSimulation();
+      runVariabilityExperiment();
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ]
+        });
+      }
+    });
+  </script>
+</body>
+</html>
